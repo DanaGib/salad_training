@@ -39,7 +39,9 @@ class VPRModel(pl.LightningModule):
         loss_name='MultiSimilarityLoss', 
         miner_name='MultiSimilarityMiner', 
         miner_margin=0.1,
-        faiss_gpu=False
+        faiss_gpu=False,
+        alpha: float = 0.2,
+        teacher_name: str = 'depth-anything/Depth-Anything-V2-Base',
     ):
         super().__init__()
 
@@ -71,7 +73,11 @@ class VPRModel(pl.LightningModule):
         self.batch_acc = [] # we will keep track of the % of trivial pairs/triplets at the loss level 
 
         self.faiss_gpu = faiss_gpu
-        
+        self.alpha = alpha
+        if alpha > 0.0:
+            from models.teacher import DepthTeacher
+            self.depth_teacher = DepthTeacher(teacher_name)
+
         # ----------------------------------
         # get the backbone and the aggregator
         self.backbone = helper.get_backbone(backbone_arch, backbone_config)
@@ -174,14 +180,27 @@ class VPRModel(pl.LightningModule):
         images = places.view(BS*N, ch, h, w)
         labels = labels.view(-1)
 
-        # Feed forward the batch to the model
-        descriptors = self(images) # Here we are calling the method forward that we defined above
+        # Run backbone and aggregator separately to intercept patch features
+        backbone_out = self.backbone(images)
+        descriptors = self.aggregator(backbone_out)
 
         if torch.isnan(descriptors).any():
             raise ValueError('NaNs in descriptors')
 
-        loss = self.loss_function(descriptors, labels) # Call the loss_function we defined above
-        
+        loss_vpr = self.loss_function(descriptors, labels)
+
+        if self.alpha > 0.0:
+            student_local = self.aggregator.project_patches(backbone_out[0])
+            with torch.cuda.amp.autocast(enabled=False):
+                teacher_local = self.depth_teacher(images.float())
+            loss_dist = utils.local_distill_loss(
+                student_local, teacher_local.to(student_local.dtype)
+            )
+            loss = loss_vpr + self.alpha * loss_dist
+            self.log('loss_dist', loss_dist.item(), logger=True, prog_bar=True)
+        else:
+            loss = loss_vpr
+
         self.log('loss', loss.item(), logger=True, prog_bar=True)
         return {'loss': loss}
     
