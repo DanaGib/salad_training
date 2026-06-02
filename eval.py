@@ -12,9 +12,17 @@ from dataloaders.val.NordlandDataset import NordlandDataset
 from dataloaders.val.MapillaryDataset import MSLS
 from dataloaders.val.MapillaryTestDataset import MSLSTest
 from dataloaders.val.PittsburghDataset import PittsburghDataset
+from dataloaders.val.Pitts30kDataset import Pitts30kDataset
+from dataloaders.val.AmsterTimeDataset import AmsterTimeDataset
 from dataloaders.val.SPEDDataset import SPEDDataset
 
-VAL_DATASETS = ['MSLS', 'MSLS_Test', 'pitts30k_test', 'pitts250k_test', 'Nordland', 'SPED']
+VAL_DATASETS = [
+    'MSLS', 'MSLS_Test',
+    'pitts30k_test', 'pitts30k_val',
+    'pitts250k_test',
+    'Nordland', 'SPED',
+    'amstertime',
+]
 
 
 def input_transform(image_size=None):
@@ -44,8 +52,14 @@ def get_val_dataset(dataset_name, image_size=None):
     elif 'msls' in dataset_name:
         ds = MSLS(input_transform=transform)
 
+    elif dataset_name in ('pitts30k_test', 'pitts30k_val'):
+        ds = Pitts30kDataset(which_ds=dataset_name, input_transform=transform)
+
     elif 'pitts' in dataset_name:
         ds = PittsburghDataset(which_ds=dataset_name, input_transform=transform)
+
+    elif 'amstertime' in dataset_name:
+        ds = AmsterTimeDataset(split='test', input_transform=transform)
 
     elif 'sped' in dataset_name:
         ds = SPEDDataset(input_transform=transform)
