@@ -41,7 +41,7 @@ class VPRModel(pl.LightningModule):
         miner_margin=0.1,
         faiss_gpu=False,
         alpha: float = 0.2,
-        teacher_name: str = 'depth-anything/Depth-Anything-V2-Base',
+        teacher_name: str = 'depth-anything/Depth-Anything-V2-Base-hf',
     ):
         super().__init__()
 
