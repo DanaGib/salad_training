@@ -1,3 +1,5 @@
+import os
+import warnings
 from os.path import join, exists
 from collections import namedtuple
 from scipy.io import loadmat
@@ -9,11 +11,13 @@ import torch.utils.data as data
 from PIL import Image, UnidentifiedImageError
 from sklearn.neighbors import NearestNeighbors
 
-root_dir = '../data/Pittsburgh/'
+root_dir = os.environ.get('PITTS_PATH', '../data/Pittsburgh/')
 
 if not exists(root_dir):
-    raise FileNotFoundError(
-        'root_dir is hardcoded, please adjust to point to Pittsburgh dataset')
+    warnings.warn(
+        f'Pittsburgh dataset not found at {root_dir}. '
+        'Set PITTS_PATH env var if you need Pittsburgh validation.'
+    )
 
 struct_dir = join(root_dir, 'datasets/')
 queries_dir = join(root_dir, 'queries_real')
