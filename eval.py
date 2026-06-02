@@ -83,9 +83,14 @@ def load_model(ckpt_path):
             'cluster_dim': 128,
             'token_dim': 256,
         },
+        alpha=0.0,  # teacher not needed for inference
     )
 
-    model.load_state_dict(torch.load(ckpt_path))
+    state = torch.load(ckpt_path, map_location='cpu')
+    # checkpoints trained with distillation contain depth_teacher weights;
+    # strip them so strict loading works without the teacher module
+    state = {k: v for k, v in state.items() if not k.startswith('depth_teacher.')}
+    model.load_state_dict(state, strict=True)
     model = model.eval()
     model = model.to('cuda')
     print(f"Loaded model from {ckpt_path} Successfully!")

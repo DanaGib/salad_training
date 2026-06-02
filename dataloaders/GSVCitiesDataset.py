@@ -1,5 +1,6 @@
 # https://github.com/amaralibey/gsv-cities
 
+import os
 import pandas as pd
 from pathlib import Path
 from PIL import Image, ImageFile, UnidentifiedImageError
@@ -13,8 +14,8 @@ default_transform = T.Compose([
     T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-# NOTE: Hard coded path to dataset folder 
-BASE_PATH = '../data/GSVCities/'
+# Override with env var GSVCITIES_PATH if set, else fall back to default
+BASE_PATH = os.environ.get('GSVCITIES_PATH', '../data/GSVCities/')
 
 if not Path(BASE_PATH).exists():
     raise FileNotFoundError(
