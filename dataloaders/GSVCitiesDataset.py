@@ -15,7 +15,7 @@ default_transform = T.Compose([
 ])
 
 # Override with env var GSVCITIES_PATH if set, else fall back to default
-BASE_PATH = os.environ.get('GSVCITIES_PATH', '../data/GSVCities/')
+BASE_PATH = '/home/eng/giborda/delavpr/datasets/gsv_cities/'
 
 if not Path(BASE_PATH).exists():
     raise FileNotFoundError(

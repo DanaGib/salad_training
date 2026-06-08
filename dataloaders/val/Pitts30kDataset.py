@@ -4,7 +4,7 @@ from pathlib import Path
 from PIL import Image
 from torch.utils.data import Dataset
 
-PITTS_ROOT = os.environ.get("PITTS_PATH", "../data/Pittsburgh/")
+PITTS_ROOT = os.environ.get("PITTS_PATH", "/home/eng/giborda/delavpr/datasets/pitts30k/")
 THRESHOLD_M = 25.0
 _SPLIT_MAP = {
     "pitts30k_test": "test",
