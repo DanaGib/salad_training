@@ -7,14 +7,6 @@ import argparse
 
 from vpr_model import VPRModel
 from utils.validation import get_validation_recalls
-# Dataloader
-from dataloaders.val.NordlandDataset import NordlandDataset
-from dataloaders.val.MapillaryDataset import MSLS
-from dataloaders.val.MapillaryTestDataset import MSLSTest
-from dataloaders.val.PittsburghDataset import PittsburghDataset
-from dataloaders.val.Pitts30kDataset import Pitts30kDataset
-from dataloaders.val.AmsterTimeDataset import AmsterTimeDataset
-from dataloaders.val.SPEDDataset import SPEDDataset
 
 VAL_DATASETS = [
     'MSLS', 'MSLS_Test',
@@ -40,31 +32,41 @@ def input_transform(image_size=None):
         ])
 
 def get_val_dataset(dataset_name, image_size=None):
+    """Build the requested validation dataset, importing the module lazily.
+
+    Args:
+        dataset_name: One of the keys in VAL_DATASETS.
+        image_size: Optional (H, W) tuple passed to input_transform.
+
+    Returns:
+        Tuple of (dataset, num_references, num_queries, ground_truth).
+    """
     dataset_name = dataset_name.lower()
     transform = input_transform(image_size=image_size)
-    
-    if 'nordland' in dataset_name:    
+
+    if 'nordland' in dataset_name:
+        from dataloaders.val.NordlandDataset import NordlandDataset
         ds = NordlandDataset(input_transform=transform)
-
     elif 'msls_test' in dataset_name:
+        from dataloaders.val.MapillaryTestDataset import MSLSTest
         ds = MSLSTest(input_transform=transform)
-
     elif 'msls' in dataset_name:
+        from dataloaders.val.MapillaryDataset import MSLS
         ds = MSLS(input_transform=transform)
-
     elif dataset_name in ('pitts30k_test', 'pitts30k_val'):
+        from dataloaders.val.Pitts30kDataset import Pitts30kDataset
         ds = Pitts30kDataset(which_ds=dataset_name, input_transform=transform)
-
     elif 'pitts' in dataset_name:
+        from dataloaders.val.PittsburghDataset import PittsburghDataset
         ds = PittsburghDataset(which_ds=dataset_name, input_transform=transform)
-
     elif 'amstertime' in dataset_name:
+        from dataloaders.val.AmsterTimeDataset import AmsterTimeDataset
         ds = AmsterTimeDataset(split='test', input_transform=transform)
-
     elif 'sped' in dataset_name:
+        from dataloaders.val.SPEDDataset import SPEDDataset
         ds = SPEDDataset(input_transform=transform)
     else:
-        raise ValueError
+        raise ValueError(f'Unknown dataset: {dataset_name}')
     
     num_references = ds.num_references
     num_queries = ds.num_queries
@@ -100,11 +102,14 @@ def load_model(ckpt_path):
         alpha=0.0,  # teacher not needed for inference
     )
 
-    state = torch.load(ckpt_path, map_location='cpu')
-    # checkpoints trained with distillation contain depth_teacher weights;
-    # strip them so strict loading works without the teacher module
-    state = {k: v for k, v in state.items() if not k.startswith('depth_teacher.')}
-    model.load_state_dict(state, strict=True)
+    checkpoint = torch.load(ckpt_path, map_location='cpu')
+    # Lightning checkpoints wrap weights under 'state_dict'; fall back to the
+    # raw dict for plain torch.save() exports.
+    sd = checkpoint.get('state_dict', checkpoint)
+    # Strip frozen teacher weights saved during distillation training so that
+    # inference (alpha=0) can load without the DepthTeacher module.
+    sd = {k: v for k, v in sd.items() if not k.startswith('depth_teacher.')}
+    model.load_state_dict(sd, strict=True)
     model = model.eval()
     model = model.to('cuda')
     print(f"Loaded model from {ckpt_path} Successfully!")
@@ -166,7 +171,7 @@ if __name__ == '__main__':
 
         print('total_size', descriptors.shape[0], num_queries + num_references)
 
-        testing = isinstance(val_dataset, MSLSTest)
+        testing = 'msls_test' in val_name.lower()
 
         preds = get_validation_recalls(
             r_list=r_list,
@@ -181,6 +186,15 @@ if __name__ == '__main__':
 
         if testing:
             val_dataset.save_predictions(preds, args.ckpt_path + '.' + model.agg_arch + '.preds.txt')
+        else:
+            # Machine-parseable line for eval_all_checkpoints.sh
+            print(
+                f"RECALLS {val_name}"
+                f" R@1={preds[1]*100:.2f}"
+                f" R@5={preds[5]*100:.2f}"
+                f" R@10={preds[10]*100:.2f}"
+                f" R@20={preds[20]*100:.2f}"   
+            )
 
         del descriptors
         print('========> DONE!\n\n')
