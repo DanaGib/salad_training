@@ -15,7 +15,7 @@ if __name__ == '__main__':
         show_data_stats=True,
         # Pittsburgh (.mat format) and Mapillary SLS not available;
         # add them back here once compatible datasets are in place.
-        val_set_names=[],
+        val_set_names=['pitts30k_val'],
     )
     
     model = VPRModel(
@@ -54,15 +54,14 @@ if __name__ == '__main__':
         alpha=0.2,
     )
 
-    # Save a checkpoint at the end of every epoch (no val metric available).
-    # Once a validation dataset is re-added, switch monitor back to
-    # 'pitts30k_val/R1' with mode='max'.
     checkpoint_cb = pl.callbacks.ModelCheckpoint(
-        filename=f'{model.encoder_arch}' + '_(epoch{epoch:02d})',
+        filename=f'{model.encoder_arch}_epoch{{epoch:02d}}_R1={{pitts30k_val/R1:.4f}}',
+        auto_insert_metric_name=False,
         save_weights_only=True,
-        save_top_k=-1,   # keep all epoch checkpoints
+        monitor='pitts30k_val/R1',
+        mode='max',
+        save_top_k=-1, # save all checkpoints
         save_last=True,
-        every_n_epochs=1,
     )
 
     #------------------
@@ -75,7 +74,6 @@ if __name__ == '__main__':
         num_sanity_val_steps=0, # runs a validation step before stating training
         precision='16-mixed', # we use half precision to reduce  memory usage
         max_epochs=4,
-        limit_val_batches=0,        # no validation datasets available; re-enable when added
         check_val_every_n_epoch=1,
         callbacks=[checkpoint_cb],# we only run the checkpointing callback (you can add more)
         reload_dataloaders_every_n_epochs=1, # we reload the dataset to shuffle the order
