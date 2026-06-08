@@ -10,3 +10,5 @@ pytorch-metric-learning==2.3.0
 torchmetrics==1.2.0
 faiss-gpu==1.7.2
 transformers>=4.38.0
+omegaconf>=2.3.0
+wandb>=0.17.0

@@ -1,84 +1,83 @@
+"""Training entry point.
+
+Loads config.yaml as the base configuration and applies any key=value
+overrides passed on the command line, e.g.:
+
+    python main.py model.type=salad_joint_depth loss.alpha=0.3
+    python main.py loss.alignment_loss_type=cosine training.max_epochs=8
+"""
+import argparse
+
 import pytorch_lightning as pl
+from omegaconf import OmegaConf
+from pytorch_lightning.loggers import WandbLogger
 
-from vpr_model import VPRModel
 from dataloaders.GSVCitiesDataloader import GSVCitiesDataModule
+from vpr_model import VPRModel
 
-if __name__ == '__main__':        
-    datamodule = GSVCitiesDataModule(
-        batch_size=60,
-        img_per_place=4,
-        min_img_per_place=4,
-        shuffle_all=False, # shuffle all images or keep shuffling in-city only
-        random_sample_from_each_place=True,
-        image_size=(224, 224),
-        num_workers=10,
-        show_data_stats=True,
-        # Pittsburgh (.mat format) and Mapillary SLS not available;
-        # add them back here once compatible datasets are in place.
-        val_set_names=['pitts30k_val'],
+
+def parse_args():
+    """Accept zero or more key=value override strings."""
+    parser = argparse.ArgumentParser(description="Train SALAD VPR model")
+    parser.add_argument(
+        "overrides",
+        nargs="*",
+        help="Config overrides in key=value format, e.g. model.type=salad_joint_depth",
     )
-    
-    model = VPRModel(
-        #---- Encoder
-        backbone_arch='dinov2_vitb14',
-        backbone_config={
-            'num_trainable_blocks': 4,
-            'return_token': True,
-            'norm_layer': True,
-        },
-        agg_arch='SALAD',
-        agg_config={
-            'num_channels': 768,
-            'num_clusters': 64,
-            'cluster_dim': 128,
-            'token_dim': 256,
-        },
-        lr = 6e-5,
-        optimizer='adamw',
-        weight_decay=9.5e-9, # 0.001 for sgd and 0 for adam,
-        momentum=0.9,
-        lr_sched='linear',
-        lr_sched_args = {
-            'start_factor': 1,
-            'end_factor': 0.2,
-            'total_iters': 4000,
-        },
+    return parser.parse_args()
 
-        #----- Loss functions
-        # example: ContrastiveLoss, TripletMarginLoss, MultiSimilarityLoss,
-        # FastAPLoss, CircleLoss, SupConLoss,
-        loss_name='MultiSimilarityLoss',
-        miner_name='MultiSimilarityMiner', # example: TripletMarginMiner, MultiSimilarityMiner, PairMarginMiner
-        miner_margin=0.1,
-        faiss_gpu=False,
-        alpha=0.2,
+
+if __name__ == "__main__":
+    args = parse_args()
+
+    cfg = OmegaConf.load("config.yaml")
+    if args.overrides:
+        cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(args.overrides))
+
+    datamodule = GSVCitiesDataModule(
+        batch_size=cfg.training.batch_size,
+        img_per_place=cfg.training.img_per_place,
+        min_img_per_place=cfg.training.min_img_per_place,
+        shuffle_all=False,
+        random_sample_from_each_place=True,
+        image_size=tuple(cfg.training.image_size),
+        num_workers=cfg.training.num_workers,
+        show_data_stats=True,
+        val_set_names=list(cfg.training.val_set_names),
+    )
+
+    model = VPRModel(cfg)
+
+    logger = WandbLogger(
+        project=cfg.wandb.project,
+        entity=cfg.wandb.entity or None,
+        name=cfg.wandb.run_name or None,
+        config=OmegaConf.to_container(cfg, resolve=True),
     )
 
     checkpoint_cb = pl.callbacks.ModelCheckpoint(
-        filename=f'{model.encoder_arch}_epoch{{epoch:02d}}_R1={{pitts30k_val/R1:.4f}}',
+        filename=f"{cfg.model.backbone.arch}_epoch{{epoch:02d}}_R1={{pitts30k_val/R1:.4f}}",
         auto_insert_metric_name=False,
         save_weights_only=True,
-        monitor='pitts30k_val/R1',
-        mode='max',
-        save_top_k=-1, # save all checkpoints
+        monitor="pitts30k_val/R1",
+        mode="max",
+        save_top_k=3,
         save_last=True,
     )
 
-    #------------------
-    # we instanciate a trainer
     trainer = pl.Trainer(
-        accelerator='gpu',
+        accelerator="gpu",
         devices=1,
-        default_root_dir=f'./logs/', # Tensorflow can be used to viz 
+        default_root_dir="./logs/",
         num_nodes=1,
-        num_sanity_val_steps=0, # runs a validation step before stating training
-        precision='16-mixed', # we use half precision to reduce  memory usage
-        max_epochs=4,
+        num_sanity_val_steps=0,
+        precision=cfg.training.precision,
+        max_epochs=cfg.training.max_epochs,
         check_val_every_n_epoch=1,
-        callbacks=[checkpoint_cb],# we only run the checkpointing callback (you can add more)
-        reload_dataloaders_every_n_epochs=1, # we reload the dataset to shuffle the order
+        callbacks=[checkpoint_cb],
+        reload_dataloaders_every_n_epochs=1,
         log_every_n_steps=20,
+        logger=logger,
     )
 
-    # we call the trainer, we give it the model and the datamodule
     trainer.fit(model=model, datamodule=datamodule)
