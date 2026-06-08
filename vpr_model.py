@@ -236,18 +236,21 @@ class VPRModel(pl.LightningModule):
         
         for i, (val_set_name, val_dataset) in enumerate(zip(dm.val_set_names, dm.val_datasets)):
             feats = torch.concat(val_step_outputs[i], dim=0)
-            
-            if 'pitts' in val_set_name:
-                # split to ref and queries
+
+            # Unified API: datasets expose num_references and ground_truth directly.
+            # Older .mat-based datasets fall back to dbStruct / getPositives().
+            if hasattr(val_dataset, 'num_references'):
+                num_references = val_dataset.num_references
+                positives = val_dataset.ground_truth
+            elif 'pitts' in val_set_name:
                 num_references = val_dataset.dbStruct.numDb
                 positives = val_dataset.getPositives()
             elif 'msls' in val_set_name:
-                # split to ref and queries
                 num_references = val_dataset.num_references
                 positives = val_dataset.pIdx
             else:
                 print(f'Please implement validation_epoch_end for {val_set_name}')
-                raise NotImplemented
+                raise NotImplementedError
 
             r_list = feats[ : num_references]
             q_list = feats[num_references : ]
