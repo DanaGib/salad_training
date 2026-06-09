@@ -4,9 +4,17 @@ Loads config.yaml as the base configuration and applies any key=value
 overrides passed on the command line, e.g.:
 
     python main.py model.type=salad_joint_depth loss.alpha=0.3
-    python main.py loss.alignment_loss_type=cosine training.max_epochs=8
+    python main.py wandb.run_name=baseline_v1
+    python main.py wandb.run_name=joint_depth_v1 model.type=salad_joint_depth
+
+Run name rules:
+  - If wandb.run_name is set (e.g. "baseline_v1"), the final name is
+    "<run_name>_<YYYYMMDD_HHMMSS>" so every run stays unique.
+  - If wandb.run_name is null, the label defaults to model.type.
+  - The same string is used for the W&B run name AND the checkpoint folder.
 """
 import argparse
+from datetime import datetime
 
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
@@ -22,7 +30,7 @@ def parse_args():
     parser.add_argument(
         "overrides",
         nargs="*",
-        help="Config overrides in key=value format, e.g. model.type=salad_joint_depth",
+        help="Config overrides in key=value format, e.g. wandb.run_name=baseline_v1",
     )
     return parser.parse_args()
 
@@ -33,6 +41,10 @@ if __name__ == "__main__":
     cfg = OmegaConf.load("config.yaml")
     if args.overrides:
         cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(args.overrides))
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    label = cfg.wandb.run_name or cfg.model.type
+    run_name = f"{label}_{timestamp}"
 
     datamodule = GSVCitiesDataModule(
         batch_size=cfg.training.batch_size,
@@ -51,17 +63,19 @@ if __name__ == "__main__":
     logger = WandbLogger(
         project=cfg.wandb.project,
         entity=cfg.wandb.entity or None,
-        name=cfg.wandb.run_name or None,
+        name=run_name,
+        save_dir="./logs/",
         config=OmegaConf.to_container(cfg, resolve=True),
     )
 
     checkpoint_cb = pl.callbacks.ModelCheckpoint(
+        dirpath=f"./logs/checkpoints/{run_name}",
         filename=f"{cfg.model.backbone.arch}_epoch{{epoch:02d}}_R1={{pitts30k_val/R1:.4f}}",
         auto_insert_metric_name=False,
         save_weights_only=True,
         monitor="pitts30k_val/R1",
         mode="max",
-        save_top_k=3,
+        save_top_k=cfg.training.save_top_k,
         save_last=True,
     )
 
