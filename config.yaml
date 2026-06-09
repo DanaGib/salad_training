@@ -64,6 +64,8 @@ training:
   log_interval: 1000
   val_set_names: ["pitts30k_val"]
   faiss_gpu: false
+  # -1 = keep all epoch checkpoints; set to 3 to keep only the best 3 by R@1
+  save_top_k: -1
 
 wandb:
   project: "salad-vpr"
