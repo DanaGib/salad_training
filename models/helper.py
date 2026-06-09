@@ -1,7 +1,10 @@
-import numpy as np
-from models import aggregators
-from models import backbones
-
+from models.backbones.resnet import ResNet
+from models.backbones.dinov2 import DINOv2
+from models.aggregators.cosplace import CosPlace
+from models.aggregators.gem import GeMPool
+from models.aggregators.mixvpr import MixVPR
+from models.aggregators.convap import ConvAP
+from models.aggregators.salad import SALAD
 
 def get_backbone(
         backbone_arch='resnet50',
@@ -17,10 +20,10 @@ def get_backbone(
         nn.Module: the backbone as a nn.Model object
     """
     if 'resnet' in backbone_arch.lower():
-        return backbones.ResNet(backbone_arch, **backbone_config)
+        return ResNet(backbone_arch, **backbone_config)
 
     elif 'dinov2' in backbone_arch.lower():
-        return backbones.DINOv2(model_name=backbone_arch, **backbone_config)
+        return DINOv2(model_name=backbone_arch, **backbone_config)
 
 
 def get_aggregator(agg_arch='ConvAP', agg_config={}):
@@ -39,18 +42,18 @@ def get_aggregator(agg_arch='ConvAP', agg_config={}):
     if 'cosplace' in agg_arch.lower():
         assert 'in_dim' in agg_config
         assert 'out_dim' in agg_config
-        return aggregators.CosPlace(**agg_config)
+        return CosPlace(**agg_config)
 
     elif 'gem' in agg_arch.lower():
         if agg_config == {}:
             agg_config['p'] = 3
         else:
             assert 'p' in agg_config
-        return aggregators.GeMPool(**agg_config)
+        return GeMPool(**agg_config)
     
     elif 'convap' in agg_arch.lower():
         assert 'in_channels' in agg_config
-        return aggregators.ConvAP(**agg_config)
+        return ConvAP(**agg_config)
     
     elif 'mixvpr' in agg_arch.lower():
         assert 'in_channels' in agg_config
@@ -58,11 +61,11 @@ def get_aggregator(agg_arch='ConvAP', agg_config={}):
         assert 'in_h' in agg_config
         assert 'in_w' in agg_config
         assert 'mix_depth' in agg_config
-        return aggregators.MixVPR(**agg_config)
+        return MixVPR(**agg_config)
 
     elif 'salad' in agg_arch.lower():
         assert 'num_channels' in agg_config
         assert 'num_clusters' in agg_config
         assert 'cluster_dim' in agg_config
         assert 'token_dim' in agg_config
-        return aggregators.SALAD(**agg_config)
+        return SALAD(**agg_config)
