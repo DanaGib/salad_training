@@ -1,9 +1,12 @@
+import csv
 import torch
 from torch.utils.data import DataLoader
 import torchvision.transforms as T
 from tqdm import tqdm
 import argparse
-
+from datetime import datetime
+from pathlib import Path
+from omegaconf import OmegaConf
 
 from vpr_model import VPRModel
 from utils.validation import get_validation_recalls
@@ -85,33 +88,55 @@ def get_descriptors(model, dataloader, device):
     return torch.cat(descriptors)
 
 def load_model(ckpt_path):
-    model = VPRModel(
-        backbone_arch='dinov2_vitb14',
-        backbone_config={
-            'num_trainable_blocks': 4,
-            'return_token': True,
-            'norm_layer': True,
+    """Load a VPRModel checkpoint for inference.
+
+    Always initialises with salad_baseline architecture (no depth teacher).
+    Works for both salad_baseline and salad_joint_depth checkpoints because
+    depth_teacher.* weights are stripped from the state dict before loading.
+
+    Args:
+        ckpt_path: Path to a Lightning .ckpt file.
+
+    Returns:
+        VPRModel in eval mode on CUDA.
+    """
+    cfg = OmegaConf.create({
+        "model": {
+            "type": "salad_baseline",
+            "backbone": {
+                "arch": "dinov2_vitb14",
+                "num_trainable_blocks": 4,
+                "return_token": True,
+                "norm_layer": True,
+            },
+            "aggregator": {
+                "num_channels": 768,
+                "num_clusters": 64,
+                "cluster_dim": 128,
+                "token_dim": 256,
+            },
         },
-        agg_arch='SALAD',
-        agg_config={
-            'num_channels': 768,
-            'num_clusters': 64,
-            'cluster_dim': 128,
-            'token_dim': 256,
+        "loss": {
+            "vpr_loss": "MultiSimilarityLoss",
+            "miner": "MultiSimilarityMiner",
+            "miner_margin": 0.1,
         },
-        alpha=0.0,  # teacher not needed for inference
-    )
+        "training": {"faiss_gpu": False},
+    })
+
+    model = VPRModel(cfg)
 
     checkpoint = torch.load(ckpt_path, map_location='cpu')
     # Lightning checkpoints wrap weights under 'state_dict'; fall back to the
     # raw dict for plain torch.save() exports.
     sd = checkpoint.get('state_dict', checkpoint)
-    # Strip frozen teacher weights saved during distillation training so that
-    # inference (alpha=0) can load without the DepthTeacher module.
-    sd = {k: v for k, v in sd.items() if not k.startswith('depth_teacher.')}
+    # Strip training-only modules saved during joint-depth runs:
+    # depth_teacher (frozen teacher) and alignment_mlp (distillation head)
+    # are not needed for inference.
+    skip = ('depth_teacher.', 'alignment_mlp.')
+    sd = {k: v for k, v in sd.items() if not k.startswith(skip)}
     model.load_state_dict(sd, strict=True)
-    model = model.eval()
-    model = model.to('cuda')
+    model = model.eval().to('cuda')
     print(f"Loaded model from {ckpt_path} Successfully!")
     return model
 
@@ -150,13 +175,35 @@ def parse_args():
     return args
 
 
+def save_results_csv(results: list, ckpt_path: str) -> Path:
+    """Write eval results to a timestamped CSV under logs/eval/.
+
+    Args:
+        results: List of dicts, one per dataset, with recall columns.
+        ckpt_path: Path to the evaluated checkpoint (used to name the file).
+
+    Returns:
+        Path to the written CSV file.
+    """
+    csv_dir = Path(__file__).parent / "logs" / "eval"
+    csv_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_path = csv_dir / f"{Path(ckpt_path).stem}_{ts}.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(results[0].keys()))
+        writer.writeheader()
+        writer.writerows(results)
+    return csv_path
+
+
 if __name__ == '__main__':
 
     torch.backends.cudnn.benchmark = True
 
     args = parse_args()
-    
+
     model = load_model(args.ckpt_path)
+    results = []
 
     for val_name in args.val_datasets:
         val_dataset, num_references, num_queries, ground_truth = get_val_dataset(val_name, args.image_size)
@@ -164,7 +211,7 @@ if __name__ == '__main__':
 
         print(f'Evaluating on {val_name}')
         descriptors = get_descriptors(model, val_loader, 'cuda')
-        
+
         print(f'Descriptor dimension {descriptors.shape[1]}')
         r_list = descriptors[ : num_references]
         q_list = descriptors[num_references : ]
@@ -187,15 +234,29 @@ if __name__ == '__main__':
         if testing:
             val_dataset.save_predictions(preds, args.ckpt_path + '.' + model.agg_arch + '.preds.txt')
         else:
-            # Machine-parseable line for eval_all_checkpoints.sh
             print(
                 f"RECALLS {val_name}"
                 f" R@1={preds[1]*100:.2f}"
                 f" R@5={preds[5]*100:.2f}"
                 f" R@10={preds[10]*100:.2f}"
-                f" R@20={preds[20]*100:.2f}"   
+                f" R@20={preds[20]*100:.2f}"
             )
+            results.append({
+                "checkpoint": Path(args.ckpt_path).name,
+                "dataset": val_name,
+                "image_size": str(args.image_size),
+                "R@1":  round(preds[1]  * 100, 2),
+                "R@5":  round(preds[5]  * 100, 2),
+                "R@10": round(preds[10] * 100, 2),
+                # "R@15": round(preds[15] * 100, 2),
+                "R@20": round(preds[20] * 100, 2),
+                # "R@25": round(preds[25] * 100, 2),
+            })
 
         del descriptors
         print('========> DONE!\n\n')
+
+    if results:
+        csv_path = save_results_csv(results, args.ckpt_path)
+        print(f"Results saved to {csv_path}")
 
