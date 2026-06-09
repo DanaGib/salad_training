@@ -11,7 +11,7 @@ import utils
 class ValidationMixin:
     """Provides Lightning validation hooks: step, epoch start/end.
 
-    Computes Recall@K (K = 1, 5, 10, 15, 20, 50, 100) via FAISS nearest-
+    Computes Recall@K (K = 1, 5, 10, 20) via FAISS nearest-
     neighbour search and logs results to the Lightning logger (and W&B when
     WandbLogger is active).
     """
@@ -60,7 +60,7 @@ class ValidationMixin:
             recall_dict = utils.get_validation_recalls(
                 r_list=r_list,
                 q_list=q_list,
-                k_values=[1, 5, 10, 15, 20, 50, 100],
+                k_values=[1, 5, 10, 20],
                 gt=positives,
                 print_results=True,
                 dataset_name=val_set_name,
@@ -68,9 +68,10 @@ class ValidationMixin:
             )
             del r_list, q_list, feats, num_references, positives
 
-            self.log(f"{val_set_name}/R1", recall_dict[1], prog_bar=False, logger=True)
-            self.log(f"{val_set_name}/R5", recall_dict[5], prog_bar=False, logger=True)
-            self.log(f"{val_set_name}/R10", recall_dict[10], prog_bar=False, logger=True)
+            self.log(f"{val_set_name}/recall_at_1", recall_dict[1], prog_bar=False, logger=True)
+            self.log(f"{val_set_name}/recall_at_5", recall_dict[5], prog_bar=False, logger=True)
+            self.log(f"{val_set_name}/recall_at_10", recall_dict[10], prog_bar=False, logger=True)
+            self.log(f"{val_set_name}/recall_at_20", recall_dict[20], prog_bar=False, logger=True)
 
         print("\n")
         self.val_outputs = []
