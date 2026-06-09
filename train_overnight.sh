@@ -1,77 +1,124 @@
 #!/usr/bin/env bash
-# Train SALAD + JEPA distillation on GSV-Cities overnight.
+# Train one or more SALAD models then evaluate each on pitts30k_test and amstertime.
 #
 # Usage:
-#   bash train_overnight.sh <gsvcities_path>
+#   bash train_overnight.sh <gsvcities_path> --suite
+#   bash train_overnight.sh <gsvcities_path> [salad_baseline|salad_joint_depth ...] [overrides]
 #
-# Example:
-#   bash train_overnight.sh /data/GSVCities
+# --suite runs three experiments back-to-back:
+#   1. salad_baseline
+#   2. salad_joint_depth  —  mse loss,    after_mlp normalisation
+#   3. salad_joint_depth  —  cosine loss, after_mlp normalisation
 #
-# The script activates the salad virtual environment, exports the dataset
-# path, runs training, and tees all output to a timestamped log file under
-# logs/runs/ so results are preserved even if the tmux session is closed.
-#
-# Checkpoints are saved by PyTorch Lightning to ./logs/ (best 3 by R@1 on
-# pitts30k_val plus the last epoch).
+# After each training run completes, last.ckpt is automatically evaluated on
+# pitts30k_test and then amstertime. Results are appended to the same log file.
 
 set -euo pipefail
 
-# --------------------------------------------------------------------------
-# Arguments
-# --------------------------------------------------------------------------
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+PYTHON="$REPO_ROOT/env/bin/python"
+
+if [ ! -f "$PYTHON" ]; then
+    echo "Error: virtualenv not found at $REPO_ROOT/env"
+    echo "Create it with: conda env create -f environment.yml"
+    exit 1
+fi
+
 if [ -z "${1:-}" ]; then
-    echo "Usage: $0 <gsvcities_path>"
-    echo "  gsvcities_path  absolute path to the GSVCities dataset root"
+    echo "Usage: $0 <gsvcities_path> --suite"
+    echo "       $0 <gsvcities_path> [salad_baseline|salad_joint_depth ...] [key=value overrides]"
     exit 1
 fi
 
 export GSVCITIES_PATH="$1"
+export AMSTERTIME_PATH="${AMSTERTIME_PATH:-/home/eng/giborda/delavpr/datasets/amstertime/}"
+shift
 
-# --------------------------------------------------------------------------
-# Environment
-# --------------------------------------------------------------------------
-REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
-PYTHON="$REPO_ROOT/salad_env/bin/python"
-
-if [ ! -f "$PYTHON" ]; then
-    echo "Error: virtual env not found at $REPO_ROOT/salad_env"
-    echo "Create it with:  conda env create -f environment.yml"
-    exit 1
-fi
-
-# --------------------------------------------------------------------------
-# Logging
-# --------------------------------------------------------------------------
-LOG_DIR="$REPO_ROOT/logs/runs/$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/train.log"
-
-echo "========================================"
-echo "SALAD + JEPA Distillation Training"
-echo "========================================"
-echo "Start time  : $(date)"
-echo "GSVCities   : $GSVCITIES_PATH"
-echo "Checkpoint  : $REPO_ROOT/logs/"
-echo "Log file    : $LOG_FILE"
-echo "========================================"
-
-# --------------------------------------------------------------------------
-# Train
-# --------------------------------------------------------------------------
+mkdir -p "$REPO_ROOT/logs/runs"
 cd "$REPO_ROOT"
-"$PYTHON" main.py 2>&1 | tee "$LOG_FILE"
 
-EXIT_CODE=${PIPESTATUS[0]}
+# Train one model then evaluate last.ckpt on pitts30k_test and amstertime.
+# All arguments are passed as OmegaConf overrides to main.py.
+run_experiment() {
+    local label="" log ts ckpt_dir rc=0
+    for arg in "$@"; do
+        [[ "$arg" == wandb.run_name=* ]] && label="${arg#wandb.run_name=}" && break
+    done
+    [ -z "$label" ] && label="run"
+    ts=$(date +%Y%m%d_%H%M%S)
+    log="$REPO_ROOT/logs/runs/${label}_${ts}.log"
 
-echo ""
-echo "========================================"
-if [ "$EXIT_CODE" -eq 0 ]; then
-    echo "Training finished successfully at $(date)"
-    echo "Checkpoints saved to: $REPO_ROOT/logs/"
+    echo "========================================"
+    echo "Starting : $label"
+    echo "Log      : $log"
+    echo "Time     : $(date)"
+    echo "========================================"
+
+    set +e
+    "$PYTHON" main.py "$@" 2>&1 | tee "$log"
+    rc=${PIPESTATUS[0]}
+    set -e
+
+    if [ "$rc" -ne 0 ]; then
+        echo "--- FAILED: $label (exit $rc) at $(date) ---" | tee -a "$log"
+        return "$rc"
+    fi
+
+    echo "--- Training complete: $label at $(date) ---" | tee -a "$log"
+
+    # Locate the checkpoint folder created by this run (newest matching label_*)
+    ckpt_dir=$(ls -td "$REPO_ROOT/logs/checkpoints/${label}_"* 2>/dev/null | head -1 || true)
+
+    if [ -z "$ckpt_dir" ] || [ ! -f "$ckpt_dir/last.ckpt" ]; then
+        echo "--- WARNING: last.ckpt not found under $ckpt_dir, skipping eval ---" | tee -a "$log"
+        return 0
+    fi
+
+    echo "--- Evaluating $label on pitts30k_test ---" | tee -a "$log"
+    "$PYTHON" eval.py --ckpt_path "$ckpt_dir/last.ckpt" \
+        --val_datasets pitts30k_test --image_size 322 322 --batch_size 256 \
+        2>&1 | tee -a "$log"
+
+    echo "--- Evaluating $label on amstertime ---" | tee -a "$log"
+    "$PYTHON" eval.py --ckpt_path "$ckpt_dir/last.ckpt" \
+        --val_datasets amstertime --image_size 322 322 --batch_size 256 \
+        2>&1 | tee -a "$log"
+
+    echo "--- All done: $label at $(date) ---" | tee -a "$log"
+}
+
+OVERALL=0
+
+if [ "${1:-}" = "--suite" ]; then
+    run_experiment \
+        "model.type=salad_baseline" \
+        "wandb.run_name=baseline" \
+        || OVERALL=$?
+
+    run_experiment \
+        "model.type=salad_joint_depth" \
+        "model.normalization.stage=after_mlp" \
+        "loss.alignment_loss_type=mse" \
+        "wandb.run_name=joint_depth_mse_after_mlp" \
+        || OVERALL=$?
+
+    run_experiment \
+        "model.type=salad_joint_depth" \
+        "model.normalization.stage=after_mlp" \
+        "loss.alignment_loss_type=cosine" \
+        "wandb.run_name=joint_depth_cosine_after_mlp" \
+        || OVERALL=$?
 else
-    echo "Training FAILED with exit code $EXIT_CODE at $(date)"
-fi
-echo "Log saved to: $LOG_FILE"
-echo "========================================"
+    MODEL_TYPES=()
+    EXTRA=()
+    for arg in "$@"; do
+        [[ "$arg" == salad_* && "$arg" != *=* ]] && MODEL_TYPES+=("$arg") || EXTRA+=("$arg")
+    done
+    [ ${#MODEL_TYPES[@]} -eq 0 ] && MODEL_TYPES=("salad_baseline")
 
-exit "$EXIT_CODE"
+    for mt in "${MODEL_TYPES[@]}"; do
+        run_experiment "model.type=${mt}" "${EXTRA[@]+"${EXTRA[@]}"}" || OVERALL=$?
+    done
+fi
+
+exit "$OVERALL"
