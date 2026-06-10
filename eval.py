@@ -121,7 +121,7 @@ def load_model(ckpt_path):
             "miner": "MultiSimilarityMiner",
             "miner_margin": 0.1,
         },
-        "training": {"faiss_gpu": False},
+        "training": {"faiss_gpu": False, "log_interval": 1000},
     })
 
     model = VPRModel(cfg)
