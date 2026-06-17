@@ -6,7 +6,6 @@ interval console logging, and the gradient-norm hook.
 W&B logging is via Lightning self.log() throughout.
 """
 import torch
-import torch.nn.functional as F
 
 
 class TrainingMixin:
@@ -57,8 +56,6 @@ class TrainingMixin:
         if self.is_joint:
             feat_map = backbone_out[0]
             student = feat_map.flatten(2).permute(0, 2, 1)
-            if self.cfg.model.normalization.stage == "before_mlp":
-                student = F.normalize(student, p=2, dim=-1)
             student = self.alignment_mlp(student)
             with torch.cuda.amp.autocast(enabled=False):
                 teacher = self.depth_teacher(images.float())
