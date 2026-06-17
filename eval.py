@@ -4,7 +4,6 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as T
 from tqdm import tqdm
 import argparse
-from datetime import datetime
 from pathlib import Path
 from omegaconf import OmegaConf
 
@@ -158,6 +157,17 @@ def parse_args():
     )
     parser.add_argument('--image_size', nargs='*', default=None, help='Image size (int, tuple or None)')
     parser.add_argument('--batch_size', type=int, default=512, help='Batch size')
+    parser.add_argument(
+        '--run_name', type=str, default=None,
+        help='Human-readable run label written as the run_name column in the CSV. '
+             'Defaults to the checkpoint filename stem.',
+    )
+    parser.add_argument(
+        '--csv_name', type=str, default=None,
+        help='Filename stem for the output CSV (written to logs/eval/<csv_name>.csv). '
+             'Defaults to run_name. Set the same value across multiple eval calls '
+             'to accumulate all results in one file.',
+    )
 
     args = parser.parse_args()
 
@@ -175,23 +185,27 @@ def parse_args():
     return args
 
 
-def save_results_csv(results: list, ckpt_path: str) -> Path:
-    """Write eval results to a timestamped CSV under logs/eval/.
+def save_results_csv(results: list, run_name: str) -> Path:
+    """Append eval results to a per-run CSV under logs/eval/.
+
+    The file is named after run_name so all evaluations for the same run
+    accumulate in one place. The header is written only when the file is new.
 
     Args:
         results: List of dicts, one per dataset, with recall columns.
-        ckpt_path: Path to the evaluated checkpoint (used to name the file).
+        run_name: Human-readable label used as the CSV filename stem.
 
     Returns:
         Path to the written CSV file.
     """
     csv_dir = Path(__file__).parent / "logs" / "eval"
     csv_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = csv_dir / f"{Path(ckpt_path).stem}_{ts}.csv"
-    with open(csv_path, "w", newline="") as f:
+    csv_path = csv_dir / f"{run_name}.csv"
+    write_header = not csv_path.exists()
+    with open(csv_path, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(results[0].keys()))
-        writer.writeheader()
+        if write_header:
+            writer.writeheader()
         writer.writerows(results)
     return csv_path
 
@@ -242,21 +256,22 @@ if __name__ == '__main__':
                 f" R@20={preds[20]*100:.2f}"
             )
             results.append({
+                "run_name": args.run_name or Path(args.ckpt_path).stem,
                 "checkpoint": Path(args.ckpt_path).name,
                 "dataset": val_name,
                 "image_size": str(args.image_size),
                 "R@1":  round(preds[1]  * 100, 2),
                 "R@5":  round(preds[5]  * 100, 2),
                 "R@10": round(preds[10] * 100, 2),
-                # "R@15": round(preds[15] * 100, 2),
                 "R@20": round(preds[20] * 100, 2),
-                # "R@25": round(preds[25] * 100, 2),
             })
 
         del descriptors
         print('========> DONE!\n\n')
 
     if results:
-        csv_path = save_results_csv(results, args.ckpt_path)
+        run_name = args.run_name or Path(args.ckpt_path).stem
+        csv_name = args.csv_name or run_name
+        csv_path = save_results_csv(results, csv_name)
         print(f"Results saved to {csv_path}")
 
