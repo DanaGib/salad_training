@@ -4,7 +4,10 @@ from pathlib import Path
 from PIL import Image
 from torch.utils.data import Dataset
 
-AMSTERTIME_ROOT = os.environ.get("AMSTERTIME_PATH", "../data/amstertime/")
+AMSTERTIME_ROOT = os.environ.get(
+    "AMSTERTIME_PATH",
+    "/home/eng/giborda/delavpr/datasets/amstertime/",
+)
 
 
 class AmsterTimeDataset(Dataset):
