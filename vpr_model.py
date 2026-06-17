@@ -52,7 +52,6 @@ class VPRModel(TrainingMixin, ValidationMixin, OptimiserMixin, pl.LightningModul
             self.alignment_mlp = get_alignment_mlp(cfg.model.mlp)
             self.alignment_loss = AlignmentLoss(
                 loss_type=cfg.loss.alignment_loss_type,
-                norm_stage=cfg.model.normalization.stage,
             )
 
     def forward(self, x):
