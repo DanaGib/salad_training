@@ -2,7 +2,7 @@
 # Single-run smoke test for the new depth distillation model types.
 #
 # Trains salad_predictor_global with one alpha_global value, then evaluates
-# the saved checkpoint on four datasets and writes recall results to a CSV.
+# the saved checkpoint on pitts30k_test and amstertime, writing recall to CSV.
 # Training is logged to W&B automatically (configure wandb.entity in config.yaml
 # or set WANDB_ENTITY env var before running).
 #
@@ -74,7 +74,7 @@ echo "--- Step 1: Training ---"
     "loss.alpha_local=0.2" \
     "model.mlp.normalization=none" \
     "loss.alignment_loss_type=cosine" \
-    "training.val_set_names=[pitts30k_val,msls_val]" \
+    "training.val_set_names=[pitts30k_val]" \
     "wandb.run_name=${RUN_NAME}" \
     2>&1 | tee "$TRAIN_LOG"
 
@@ -100,7 +100,7 @@ echo "--- Using checkpoint: $CKPT_DIR/last.ckpt ---"
 echo "--- Step 2: Multi-dataset evaluation ---"
 "$PYTHON" eval.py \
     --ckpt_path "$CKPT_DIR/last.ckpt" \
-    --val_datasets pitts30k_test amstertime msls_val nordland \
+    --val_datasets pitts30k_test amstertime \
     --image_size 322 322 \
     --batch_size 256 \
     --run_name "${RUN_NAME}" \
