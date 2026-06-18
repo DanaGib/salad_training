@@ -10,8 +10,11 @@
 #   bash train_smoke_test.sh <gsvcities_path> [model_type] [alpha_global]
 #
 # Defaults:
-#   model_type  = salad_predictor_global
+#   model_type   = salad_predictor_global
 #   alpha_global = 0.1
+#
+# MLP base config is fixed to the best prior experiment:
+#   cosine alignment loss, no normalization, alpha_local=0.2
 #
 # Examples:
 #   bash train_smoke_test.sh /data/gsvcities
@@ -64,12 +67,13 @@ echo "========================================"
 # All training metrics (MS loss, local/global depth loss, LR) go to W&B.
 # ---------------------------------------------------------------------------
 echo "--- Step 1: Training ---"
+# Base MLP config: cosine loss + no normalization (best prior experiment)
 "$PYTHON" main.py \
     "model.type=${MODEL_TYPE}" \
     "loss.alpha_global=${ALPHA_GLOBAL}" \
     "loss.alpha_local=0.2" \
-    "model.mlp.normalization=after" \
-    "loss.alignment_loss_type=mse" \
+    "model.mlp.normalization=none" \
+    "loss.alignment_loss_type=cosine" \
     "training.val_set_names=[pitts30k_val,msls_val]" \
     "wandb.run_name=${RUN_NAME}" \
     2>&1 | tee "$TRAIN_LOG"

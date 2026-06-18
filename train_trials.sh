@@ -2,6 +2,7 @@
 # Instructor-specified depth distillation trials.
 #
 # Block A: salad_predictor_global — alpha_global sweep, alpha_local fixed at 0.2
+#   Base config matches best previous experiment: cosine loss, no normalization
 # Block B: salad_global_depth    — alpha_global sweep, with/without linear proj
 # Block C: salad_global_local_depth — alpha_global x alpha_local grid
 # Block D: extended dataset evaluation (adds msls_val + nordland)
@@ -82,14 +83,16 @@ OVERALL=0
 # ---------------------------------------------------------------------------
 if [[ "$BLOCK" == "A" || "$BLOCK" == "all" ]]; then
     echo "=== Block A: salad_predictor_global alpha_global sweep ==="
+    # Base config: cosine loss, no normalization, alpha_local=0.2
+    # (best-performing config from prior joint_depth experiments)
     for ag in 0.05 0.1 0.5 1.0; do
         run_experiment \
             "model.type=salad_predictor_global" \
             "loss.alpha_global=${ag}" \
             "loss.alpha_local=0.2" \
-            "model.mlp.normalization=after" \
-            "loss.alignment_loss_type=mse" \
-            "wandb.run_name=pred_global_ag${ag}" \
+            "model.mlp.normalization=none" \
+            "loss.alignment_loss_type=cosine" \
+            "wandb.run_name=pred_global_cos_none_ag${ag}" \
             || OVERALL=$?
     done
 fi
@@ -128,15 +131,16 @@ fi
 # ---------------------------------------------------------------------------
 if [[ "$BLOCK" == "C" || "$BLOCK" == "all" ]]; then
     echo "=== Block C: salad_global_local_depth alpha grid ==="
+    # Same base config as Block A (cosine, no normalization)
     for ag in 0.05 0.1; do
         for al in 0.1 0.5; do
             run_experiment \
                 "model.type=salad_global_local_depth" \
                 "loss.alpha_global=${ag}" \
                 "loss.alpha_local=${al}" \
-                "model.mlp.normalization=after" \
-                "loss.alignment_loss_type=mse" \
-                "wandb.run_name=global_local_ag${ag}_al${al}" \
+                "model.mlp.normalization=none" \
+                "loss.alignment_loss_type=cosine" \
+                "wandb.run_name=global_local_cos_none_ag${ag}_al${al}" \
                 || OVERALL=$?
         done
     done
