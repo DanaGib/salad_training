@@ -131,7 +131,7 @@ run_experiment \
     "model.mlp.type=linear" \
     "model.mlp.normalization=none" \
     "loss.alignment_loss_type=mse" \
-    "loss.alpha=100" \
+    "loss.alpha_local=100" \
     "wandb.run_name=linear_depth_mse_none_alpha100" \
     || OVERALL=$?
 
@@ -140,7 +140,7 @@ run_experiment \
     "model.mlp.type=linear" \
     "model.mlp.normalization=after" \
     "loss.alignment_loss_type=mse" \
-    "loss.alpha=100" \
+    "loss.alpha_local=100" \
     "wandb.run_name=linear_depth_mse_after_alpha100" \
     || OVERALL=$?
 
@@ -149,7 +149,7 @@ run_experiment \
     "model.mlp.type=linear" \
     "model.mlp.normalization=none" \
     "loss.alignment_loss_type=mse" \
-    "loss.alpha=500" \
+    "loss.alpha_local=500" \
     "wandb.run_name=linear_depth_mse_none_alpha500" \
     || OVERALL=$?
 
@@ -158,7 +158,7 @@ run_experiment \
     "model.mlp.type=linear" \
     "model.mlp.normalization=after" \
     "loss.alignment_loss_type=mse" \
-    "loss.alpha=500" \
+    "loss.alpha_local=500" \
     "wandb.run_name=linear_depth_mse_after_alpha500" \
     || OVERALL=$?
 

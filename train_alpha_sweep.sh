@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run two joint-depth MSE experiments sweeping loss.alpha (100 and 500).
+# Run two joint-depth MSE experiments sweeping loss.alpha_local (100 and 500).
 # Normalization: after_mlp. Auto-evals last.ckpt after each run.
 #
 # Usage:
@@ -76,7 +76,7 @@ run_experiment \
     "model.type=salad_joint_depth" \
     "model.mlp.normalization=after" \
     "loss.alignment_loss_type=mse" \
-    "loss.alpha=100" \
+    "loss.alpha_local=100" \
     "wandb.run_name=joint_depth_mse_after_alpha100" \
     || OVERALL=$?
 
@@ -84,7 +84,7 @@ run_experiment \
     "model.type=salad_joint_depth" \
     "model.mlp.normalization=after" \
     "loss.alignment_loss_type=mse" \
-    "loss.alpha=500" \
+    "loss.alpha_local=500" \
     "wandb.run_name=joint_depth_mse_after_alpha500" \
     || OVERALL=$?
 
