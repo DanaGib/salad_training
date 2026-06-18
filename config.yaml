@@ -1,7 +1,10 @@
 model:
-  # Options: "salad_baseline" | "salad_joint_depth"
-  # salad_baseline: standard SALAD, no depth branch, alpha is ignored
-  # salad_joint_depth: adds frozen DepthTeacher + AlignmentMLP + AlignmentLoss
+  # Options:
+  #   salad_baseline          — standard SALAD, no depth branch
+  #   salad_joint_depth       — SALAD + frozen teacher + AlignmentMLP (local loss only)
+  #   salad_predictor_global  — local loss + SALAD applied to predictor output (global)
+  #   salad_global_depth      — SALAD applied to depth features for a global depth loss
+  #   salad_global_local_depth — global depth loss + local alignment loss
   type: "salad_baseline"
 
   backbone:
@@ -16,7 +19,8 @@ model:
     cluster_dim: 128
     token_dim: 256
 
-  # Alignment MLP — only used when model.type = salad_joint_depth
+  # Alignment MLP — used when model.type requires a local distillation branch:
+  #   salad_joint_depth, salad_predictor_global, salad_global_local_depth
   mlp:
     # Options: "token_by_token" | "linear"
     #   token_by_token : Linear -> ReLU -> Linear (uses hidden_dim)
@@ -40,8 +44,16 @@ loss:
   miner_margin: 0.1
   # Options: "mse" | "cosine"
   alignment_loss_type: "mse"
-  # Weight of the alignment loss in the combined objective
-  alpha: 0.2
+  # Weight of the local patch-alignment loss (salad_joint_depth, salad_predictor_global,
+  # salad_global_local_depth). Formerly named "alpha".
+  alpha_local: 0.2
+  # Weight of the global depth MS loss (salad_predictor_global, salad_global_depth,
+  # salad_global_local_depth).
+  alpha_global: 0.1
+  # If true, inserts a learnable nn.Linear(768,768) before passing depth features into
+  # the SALAD head (salad_global_depth / salad_global_local_depth only).
+  # Use when the global depth loss shows convergence trouble due to feature-space mismatch.
+  use_linear_proj: false
 
 training:
   batch_size: 60
