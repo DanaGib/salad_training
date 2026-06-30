@@ -16,39 +16,38 @@ sys.path.insert(0, '.')
 
 
 # ---------------------------------------------------------------------------
-# 1. local_distill_loss: output is a scalar tensor
+# 1. AlignmentLoss: output is a scalar tensor
 # ---------------------------------------------------------------------------
 def test_distill_loss_returns_scalar():
-    from utils.distill_loss import local_distill_loss
+    from losses.alignment import AlignmentLoss
     pred   = torch.randn(4, 256, 768)
     target = torch.randn(4, 256, 768)
-    loss = local_distill_loss(pred, target)
+    loss = AlignmentLoss("mse")(pred, target)
     assert loss.shape == (), f"loss must be scalar, got shape {loss.shape}"
 
 
 # ---------------------------------------------------------------------------
-# 2. local_distill_loss: gradient flows to pred but not to target
+# 2. AlignmentLoss: gradient flows to pred but not to target
 # ---------------------------------------------------------------------------
 def test_distill_loss_gradient_flows():
-    from utils.distill_loss import local_distill_loss
+    from losses.alignment import AlignmentLoss
     pred   = torch.randn(2, 256, 768, requires_grad=True)
     target = torch.randn(2, 256, 768)
-    loss = local_distill_loss(pred, target)
+    loss = AlignmentLoss("mse")(pred, target)
     loss.backward()
     assert pred.grad is not None, "gradient must reach pred"
     assert target.grad is None, "target must not accumulate gradients"
 
 
 # ---------------------------------------------------------------------------
-# 3. local_distill_loss: zero loss when inputs are already unit-normalized
-#    and identical (cosine-direction MSE = 0)
+# 3. AlignmentLoss: zero loss when inputs are identical unit-normalized tensors
 # ---------------------------------------------------------------------------
 def test_distill_loss_zero_on_identical():
     import torch.nn.functional as F
-    from utils.distill_loss import local_distill_loss
+    from losses.alignment import AlignmentLoss
     x = torch.randn(2, 256, 768)
     x_norm = F.normalize(x, p=2, dim=-1)
-    loss = local_distill_loss(x_norm, x_norm)
+    loss = AlignmentLoss("mse")(x_norm, x_norm)
     assert loss.item() < 1e-6, f"loss must be ~0 on identical inputs, got {loss.item()}"
 
 
