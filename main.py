@@ -70,10 +70,10 @@ if __name__ == "__main__":
 
     checkpoint_cb = pl.callbacks.ModelCheckpoint(
         dirpath=f"./logs/checkpoints/{run_name}",
-        filename=f"{cfg.model.backbone.arch}_epoch{{epoch:02d}}_R1={{pitts30k_val/R1:.4f}}",
+        filename=f"{cfg.model.backbone.arch}_epoch{{epoch:02d}}_R1={{pitts30k_val/recall_at_1:.4f}}",
         auto_insert_metric_name=False,
         save_weights_only=True,
-        monitor="pitts30k_val/R1",
+        monitor="pitts30k_val/recall_at_1",
         mode="max",
         save_top_k=cfg.training.save_top_k,
         save_last=True,

@@ -18,19 +18,18 @@ model:
 
   # Alignment MLP — only used when model.type = salad_joint_depth
   mlp:
-    # Options: "token_by_token" (shared Linear applied per-patch)
-    # Future: "flattened", "global"
+    # Options: "token_by_token" | "linear"
+    #   token_by_token : Linear -> ReLU -> Linear (uses hidden_dim)
+    #   linear         : single Linear(input_dim, output_dim); hidden_dim ignored
     type: "token_by_token"
     input_dim: 768
     hidden_dim: 1024
     output_dim: 768
-
-  # Where to apply L2 normalisation in the alignment branch
-  # "after_mlp"  : normalise both student output and teacher patches before loss
-  # "before_mlp" : normalise student patches before feeding into the MLP
-  # "none"       : no normalisation; loss sees raw magnitudes
-  normalization:
-    stage: "after_mlp"
+    # L2 normalisation applied inside the MLP.
+    # "none"   : no normalisation; raw magnitudes passed to the loss
+    # "before" : F.normalize applied to input patches before the projection
+    # "after"  : F.normalize applied to projected output before the loss
+    normalization: "none"
 
   teacher:
     name: "depth-anything/Depth-Anything-V2-Base-hf"

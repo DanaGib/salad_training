@@ -1,15 +1,14 @@
-"""VPRModel: setup, optimiser, and epoch hooks.
+"""VPRModel: setup and epoch hooks.
 
-Training-step logic  → vpr_model_train.TrainingMixin
-Validation/recall    → vpr_model_val.ValidationMixin
+Training-step + grad-norm  → vpr_model_train.TrainingMixin
+Validation/recall          → vpr_model_val.ValidationMixin
+Optimiser/scheduler        → vpr_model_optim.OptimiserMixin
 
 Supported model types (config.model.type):
   salad_baseline    — standard SALAD, no depth branch
   salad_joint_depth — SALAD + frozen DepthTeacher + AlignmentMLP + AlignmentLoss
 """
-import torch
 import pytorch_lightning as pl
-from torch.optim import lr_scheduler
 from omegaconf import DictConfig
 
 import utils
@@ -18,9 +17,12 @@ from models.mlps import get_alignment_mlp
 from losses import AlignmentLoss
 from vpr_model_train import TrainingMixin
 from vpr_model_val import ValidationMixin
+from vpr_model_optim import OptimiserMixin
+from utils import LossAccumulator
 
 
-class VPRModel(TrainingMixin, ValidationMixin, pl.LightningModule):
+
+class VPRModel(TrainingMixin, ValidationMixin, OptimiserMixin, pl.LightningModule):
     """Visual Place Recognition model driven by a single OmegaConf config."""
 
     def __init__(self, cfg: DictConfig) -> None:
@@ -41,9 +43,8 @@ class VPRModel(TrainingMixin, ValidationMixin, pl.LightningModule):
 
         self.loss_fn = utils.get_loss(cfg.loss.vpr_loss)
         self.miner = utils.get_miner(cfg.loss.miner, cfg.loss.miner_margin)
-        self.batch_acc = []
         self.val_outputs = []
-        self._accum = {"ms": 0.0, "align": 0.0, "total": 0.0, "n": 0}
+        self._loss_acc = LossAccumulator(cfg.training.log_interval)
 
         if self.is_joint:
             from models.teacher import DepthTeacher
@@ -51,41 +52,40 @@ class VPRModel(TrainingMixin, ValidationMixin, pl.LightningModule):
             self.alignment_mlp = get_alignment_mlp(cfg.model.mlp)
             self.alignment_loss = AlignmentLoss(
                 loss_type=cfg.loss.alignment_loss_type,
-                norm_stage=cfg.model.normalization.stage,
             )
 
     def forward(self, x):
         return self.aggregator(self.backbone(x))
+    
+    def on_fit_start(self) -> None:
+        """Bind W&B metric x-axes once the run is initialized."""
+        import wandb
+        wandb.define_metric("trainer/global_step")
+        wandb.define_metric("train/*", step_metric="trainer/global_step")
+        wandb.define_metric("train_epoch/*", step_metric="epoch")
 
-    def on_train_epoch_end(self):
-        self.batch_acc = []
-        # Bug 3 fix: flush any partial window so values don't bleed into the next epoch.
-        self._accum = {"ms": 0.0, "align": 0.0, "total": 0.0, "n": 0}
+    def on_train_epoch_end(self) -> None:
+        """Log epoch-level loss averages and alpha-analysis metrics to W&B."""
+        avgs = self._loss_acc.epoch_averages()
+        alpha = self.cfg.loss.alpha if self.is_joint else 0.0
 
-    def configure_optimizers(self):
-        cfg = self.cfg.training
-        if cfg.optimizer == "adamw":
-            opt = torch.optim.AdamW(
-                self.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay
-            )
-        elif cfg.optimizer == "sgd":
-            opt = torch.optim.SGD(
-                self.parameters(),
-                lr=cfg.lr,
-                weight_decay=cfg.weight_decay,
-                momentum=cfg.momentum,
-            )
-        else:
-            raise ValueError(f"Unsupported optimizer: {cfg.optimizer}")
+        self.log("train_epoch/ms_loss", avgs["ms"], on_step=False, on_epoch=True)
+        self.log("train_epoch/total_loss", avgs["total"], on_step=False, on_epoch=True)
+        self.log("train_epoch/hard_pairs_avg", avgs["hard_pairs_avg"],
+                 on_step=False, on_epoch=True)
 
-        scheduler = lr_scheduler.LinearLR(
-            opt,
-            start_factor=cfg.lr_sched_start_factor,
-            end_factor=cfg.lr_sched_end_factor,
-            total_iters=cfg.lr_sched_total_iters,
-        )
-        return [opt], [scheduler]
+        if self.is_joint:
+            self.log("train_epoch/alignment_loss", avgs["align"],
+                     on_step=False, on_epoch=True)
+            ratio = avgs["ms"] / (avgs["align"] + 1e-8)
+            contrib = 100.0 * alpha * avgs["align"] / (avgs["total"] + 1e-8)
+            self.log("train_epoch/loss_scale_ratio", ratio, on_step=False, on_epoch=True)
+            self.log("train_epoch/align_contribution_pct", contrib,
+                     on_step=False, on_epoch=True)
 
-    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
-        optimizer.step(closure=optimizer_closure)
-        self.lr_schedulers().step()
+        sched = self.lr_schedulers()
+        if sched is not None:
+            self.log("train_epoch/learning_rate", sched.get_last_lr()[0],
+                     on_step=False, on_epoch=True)
+
+        self._loss_acc.reset_epoch()
