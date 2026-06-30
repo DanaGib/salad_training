@@ -1,3 +1,5 @@
+import os
+
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as T
 
@@ -7,8 +9,8 @@ import numpy as np
 from PIL import Image
 from pathlib import Path
 
-DATASET_ROOT = '../data/mapillary/'
-GT_ROOT = './datasets/' # BECAREFUL, this is the ground truth that comes with GSV-Cities
+DATASET_ROOT = os.environ.get("MSLS_PATH", "/home/shared/datasets/msls_challenge/")
+GT_ROOT = './datasets/'  # ground truth index files that come with GSV-Cities
 
 class MSLSTest(Dataset):
     def __init__(self, input_transform = None):

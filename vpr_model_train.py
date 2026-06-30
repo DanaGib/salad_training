@@ -1,25 +1,26 @@
 """Training-step mixin for VPRModel.
 
-Extracted from vpr_model.py to keep that file under 100 lines.
-Contains the metric loss helper, the joint-depth forward pass,
+Contains the metric loss helper, per-model-type loss dispatch,
 interval console logging, and the gradient-norm hook.
-W&B logging is via Lightning self.log() throughout.
 """
 import torch
+from vpr_model_depth_step import (
+    compute_joint_depth_losses,
+    compute_predictor_global_losses,
+    compute_global_depth_losses,
+    compute_global_local_depth_losses,
+)
 
 
 class TrainingMixin:
-    """Provides training_step, grad-norm hook, and interval logging for VPRModel."""
+    """Provides training_step, grad-norm hook, and interval logging."""
 
     def _vpr_loss(self, descriptors, labels):
-        """Compute configured metric loss and return loss + hard-pair count.
+        """Compute configured metric loss; return (loss, nb_hard_pairs).
 
         Args:
             descriptors: L2-normalised global descriptors [B, D].
-            labels: place-id integer labels [B].
-
-        Returns:
-            Tuple of (loss tensor, nb_hard_pairs int).
+            labels: Place-id integer labels [B].
         """
         if self.miner is not None:
             mined = self.miner(descriptors, labels)
@@ -32,16 +33,20 @@ class TrainingMixin:
                 loss, _ = loss
         return loss, nb_hard
 
+    def _dispatch_depth_losses(self, images, feat_map, labels) -> dict:
+        """Route to the correct depth-loss helper based on model type."""
+        if self.is_joint:
+            return compute_joint_depth_losses(self, images, feat_map)
+        if self.is_predictor_global:
+            return compute_predictor_global_losses(self, images, feat_map, labels)
+        if self.is_global_local:
+            return compute_global_local_depth_losses(self, images, feat_map, labels)
+        if self.is_global_depth:
+            return compute_global_depth_losses(self, images, labels)
+        return {}
+
     def training_step(self, batch, batch_idx):
-        """Run one training step, log per-step losses and hard-pair count.
-
-        Logs to W&B via Lightning self.log():
-            train/ms_loss, train/alignment_loss, train/total_loss,
-            train/hard_pairs
-
-        Also accumulates values for interval console prints and epoch
-        summaries (consumed in on_train_epoch_end via self._loss_acc).
-        """
+        """Run one training step; log per-step losses and hard-pair count."""
         places, labels = batch
         BS, N, ch, h, w = places.shape
         images = places.view(BS * N, ch, h, w)
@@ -49,49 +54,39 @@ class TrainingMixin:
 
         backbone_out = self.backbone(images)
         descriptors = self.aggregator(backbone_out)
-
         loss_vpr, nb_hard = self._vpr_loss(descriptors, labels)
-        loss_align = torch.tensor(0.0, device=loss_vpr.device)
 
-        if self.is_joint:
-            feat_map = backbone_out[0]
-            student = feat_map.flatten(2).permute(0, 2, 1)
-            student = self.alignment_mlp(student)
-            with torch.cuda.amp.autocast(enabled=False):
-                teacher = self.depth_teacher(images.float())
-            loss_align = self.alignment_loss(student, teacher.to(student.dtype))
+        depth_losses = self._dispatch_depth_losses(images, backbone_out[0], labels)
+        _z = torch.tensor(0.0, device=loss_vpr.device)
+        loss_local = depth_losses.get("local", _z)
+        loss_gdepth = depth_losses.get("global_depth", _z)
 
-        alpha = self.cfg.loss.alpha if self.is_joint else 0.0
-        loss = loss_vpr + alpha * loss_align
+        a_l = getattr(self.cfg.loss, "alpha_local", 0.0)
+        a_g = getattr(self.cfg.loss, "alpha_global", 0.0)
+        loss = loss_vpr + a_l * loss_local + a_g * loss_gdepth
 
-        # Per-step W&B metrics via Lightning (axis = global_step).
         self.log("train/ms_loss", loss_vpr.item(), on_step=True, on_epoch=False,
                  prog_bar=False, logger=True)
         self.log("train/total_loss", loss.item(), on_step=True, on_epoch=False,
                  prog_bar=True, logger=True)
         self.log("train/hard_pairs", float(nb_hard), on_step=True, on_epoch=False,
                  prog_bar=False, logger=True)
-        if self.is_joint:
-            self.log("train/alignment_loss", loss_align.item(), on_step=True,
+        if "local" in depth_losses:
+            self.log("train/local_loss", loss_local.item(), on_step=True,
+                     on_epoch=False, prog_bar=False, logger=True)
+        if "global_depth" in depth_losses:
+            self.log("train/global_depth_loss", loss_gdepth.item(), on_step=True,
                      on_epoch=False, prog_bar=False, logger=True)
 
-        # Accumulate for console interval prints and epoch summaries.
-        self._loss_acc.update(loss_vpr.item(), loss_align.item(), loss.item(), nb_hard)
+        self._loss_acc.update(
+            loss_vpr.item(), loss_local.item(), loss.item(), nb_hard, loss_gdepth.item()
+        )
         self._loss_acc.maybe_print_interval(self.global_step, self.current_epoch)
-
         return {"loss": loss}
 
     def on_before_optimizer_step(self, optimizer) -> None:
-        """Log total gradient norm before each optimiser step.
-
-        Detects gradient explosion or vanishing early. Logged per step
-        so the W&B step-axis chart shows the full training trajectory.
-        """
-        norms = [
-            p.grad.detach().norm()
-            for p in self.parameters()
-            if p.grad is not None
-        ]
+        """Log total gradient norm before each optimiser step."""
+        norms = [p.grad.detach().norm() for p in self.parameters() if p.grad is not None]
         if norms:
             self.log("train/grad_norm", torch.stack(norms).norm().item(),
                      on_step=True, on_epoch=False, prog_bar=False, logger=True)

@@ -35,8 +35,22 @@ class DepthTeacher(nn.Module):
         """Keep teacher permanently in eval mode regardless of Lightning calls."""
         return super().train(False)
 
+    def _encode(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        """Run the ViT encoder and return all hidden states (CLS + patches).
+
+        Args:
+            pixel_values: Input images [B, 3, H, W] in FP32.
+
+        Returns:
+            hidden: [B, num_patches+1, 768] — index 0 is the CLS token.
+        """
+        with torch.no_grad():
+            emb = self.embeddings(pixel_values)
+            enc_out = self.vit_encoder(emb)
+            return self.layernorm(enc_out.last_hidden_state)
+
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        """Extract patch tokens from the ViT encoder.
+        """Extract patch tokens for local distillation loss.
 
         Args:
             pixel_values: Input images [B, 3, H, W] in FP32.
@@ -44,9 +58,29 @@ class DepthTeacher(nn.Module):
         Returns:
             Patch token embeddings [B, num_patches, 768].
         """
-        with torch.no_grad():
-            emb = self.embeddings(pixel_values)
-            enc_out = self.vit_encoder(emb)
-            hidden = self.layernorm(enc_out.last_hidden_state)
-        # Exclude CLS token: [B, num_patches+1, D] -> [B, num_patches, D]
+        hidden = self._encode(pixel_values)
         return hidden[:, 1:, :]
+
+    def forward_salad_format(
+        self, pixel_values: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Extract depth features in the spatial format expected by SALAD.
+
+        Reshapes patch tokens to a 2D feature map and returns the CLS token
+        separately, matching the (feature_map, cls_token) tuple produced by
+        the DINOv2 backbone wrapper.
+
+        Args:
+            pixel_values: Input images [B, 3, H, W] in FP32.
+
+        Returns:
+            feature_map: [B, 768, H/14, W/14]  e.g. [B, 768, 16, 16] at 224px.
+            cls_token:   [B, 768]
+        """
+        hidden = self._encode(pixel_values)
+        cls_token = hidden[:, 0, :]          # [B, 768]
+        patches = hidden[:, 1:, :]           # [B, num_patches, 768]
+        B, N, C = patches.shape
+        H = W = int(N ** 0.5)
+        feature_map = patches.permute(0, 2, 1).reshape(B, C, H, W)
+        return feature_map, cls_token

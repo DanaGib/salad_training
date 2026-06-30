@@ -5,6 +5,7 @@ import torchvision.transforms as T
 from tqdm import tqdm
 import argparse
 from pathlib import Path
+from typing import Optional
 from omegaconf import OmegaConf
 
 from vpr_model import VPRModel
@@ -168,6 +169,11 @@ def parse_args():
              'Defaults to run_name. Set the same value across multiple eval calls '
              'to accumulate all results in one file.',
     )
+    parser.add_argument(
+        '--csv_path', type=str, default=None,
+        help='Absolute or relative path for the output CSV. Overrides --csv_name '
+             'and the default logs/eval/ directory when set.',
+    )
 
     args = parser.parse_args()
 
@@ -185,22 +191,30 @@ def parse_args():
     return args
 
 
-def save_results_csv(results: list, run_name: str) -> Path:
-    """Append eval results to a per-run CSV under logs/eval/.
+def save_results_csv(results: list, run_name: str, csv_path: Optional[Path] = None) -> Path:
+    """Append eval results to a CSV file.
 
-    The file is named after run_name so all evaluations for the same run
-    accumulate in one place. The header is written only when the file is new.
+    When csv_path is given, results are written to that exact location.
+    Otherwise the file is placed under logs/eval/ named after run_name so all
+    evaluations for the same run accumulate in one place. The header is written
+    only when the file is new.
 
     Args:
         results: List of dicts, one per dataset, with recall columns.
-        run_name: Human-readable label used as the CSV filename stem.
+        run_name: Human-readable label used as the CSV filename stem when
+            csv_path is not provided.
+        csv_path: Optional explicit output file path; overrides run_name stem.
 
     Returns:
         Path to the written CSV file.
     """
-    csv_dir = Path(__file__).parent / "logs" / "eval"
-    csv_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = csv_dir / f"{run_name}.csv"
+    if csv_path is None:
+        csv_dir = Path(__file__).parent / "logs" / "eval"
+        csv_dir.mkdir(parents=True, exist_ok=True)
+        csv_path = csv_dir / f"{run_name}.csv"
+    else:
+        csv_path = Path(csv_path)
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
     write_header = not csv_path.exists()
     with open(csv_path, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(results[0].keys()))
@@ -271,7 +285,8 @@ if __name__ == '__main__':
 
     if results:
         run_name = args.run_name or Path(args.ckpt_path).stem
+        explicit_path = Path(args.csv_path) if args.csv_path else None
         csv_name = args.csv_name or run_name
-        csv_path = save_results_csv(results, csv_name)
-        print(f"Results saved to {csv_path}")
+        out_path = save_results_csv(results, csv_name, csv_path=explicit_path)
+        print(f"Results saved to {out_path}")
 
