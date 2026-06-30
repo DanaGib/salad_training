@@ -74,14 +74,11 @@ run_experiment() {
         return 0
     fi
 
-    echo "--- Evaluating $label on pitts30k_test ---" | tee -a "$log"
+    echo "--- Evaluating $label on pitts30k_test and amstertime ---" | tee -a "$log"
     "$PYTHON" eval.py --ckpt_path "$ckpt_dir/last.ckpt" \
-        --val_datasets pitts30k_test --image_size 322 322 --batch_size 256 \
-        2>&1 | tee -a "$log"
-
-    echo "--- Evaluating $label on amstertime ---" | tee -a "$log"
-    "$PYTHON" eval.py --ckpt_path "$ckpt_dir/last.ckpt" \
-        --val_datasets amstertime --image_size 322 322 --batch_size 256 \
+        --val_datasets pitts30k_test amstertime \
+        --image_size 322 322 --batch_size 256 \
+        --run_name "$label" \
         2>&1 | tee -a "$log"
 
     echo "--- All done: $label at $(date) ---" | tee -a "$log"
@@ -97,16 +94,16 @@ if [ "${1:-}" = "--suite" ]; then
 
     run_experiment \
         "model.type=salad_joint_depth" \
-        "model.normalization.stage=after_mlp" \
+        "model.mlp.normalization=after" \
         "loss.alignment_loss_type=mse" \
-        "wandb.run_name=joint_depth_mse_after_mlp" \
+        "wandb.run_name=joint_depth_mse_after" \
         || OVERALL=$?
 
     run_experiment \
         "model.type=salad_joint_depth" \
-        "model.normalization.stage=after_mlp" \
+        "model.mlp.normalization=after" \
         "loss.alignment_loss_type=cosine" \
-        "wandb.run_name=joint_depth_cosine_after_mlp" \
+        "wandb.run_name=joint_depth_cosine_after" \
         || OVERALL=$?
 else
     MODEL_TYPES=()
