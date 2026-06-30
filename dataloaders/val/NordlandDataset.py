@@ -13,16 +13,19 @@ from torch.utils.data import Dataset
 DATASET_ROOT = '../data/Nordland/'
 GT_ROOT = './datasets/' # BECAREFUL, this is the ground truth that comes with GSV-Cities
 
-path_obj = Path(DATASET_ROOT)
-if not path_obj.exists():
-    raise Exception(f'Please make sure the path {DATASET_ROOT} to Nordland dataset is correct')
-
-if not path_obj.joinpath('ref') or not path_obj.joinpath('query'):
-    raise Exception(f'Please make sure the directories query and ref are situated in the directory {DATASET_ROOT}')
 
 class NordlandDataset(Dataset):
-    def __init__(self, input_transform = None):
-        
+    def __init__(self, input_transform=None):
+        path_obj = Path(DATASET_ROOT)
+        if not path_obj.exists():
+            raise FileNotFoundError(
+                f'Nordland dataset not found at {DATASET_ROOT}. '
+                'Download from https://surfdrive.surf.nl/files/index.php/s/sbZRXzYe3l0v67W'
+            )
+        if not path_obj.joinpath('ref').exists() or not path_obj.joinpath('query').exists():
+            raise FileNotFoundError(
+                f'Expected "ref" and "query" subdirs inside {DATASET_ROOT}'
+            )
 
         self.input_transform = input_transform
 

@@ -1,3 +1,5 @@
+import os
+import warnings
 from pathlib import Path
 import numpy as np
 from PIL import Image
@@ -7,11 +9,14 @@ from torch.utils.data import Dataset
 # make sure the path where the mapillary_sls validation dataset resides on your computer is correct.
 # the folder named train_val should reside in DATASET_ROOT path (that's the only folder you need from mapillary_sls)
 # I hardcoded the groundtruth for image to image evaluation, otherwise it would take ages to run the groundtruth script at each epoch.
-DATASET_ROOT = '../data/mapillary/'
+DATASET_ROOT = os.environ.get('MAPILLARY_PATH', '../data/mapillary/')
 
 path_obj = Path(DATASET_ROOT)
 if not path_obj.exists():
-    raise Exception('Please make sure the path to mapillary_sls dataset is correct')
+    warnings.warn(
+        f'Mapillary SLS dataset not found at {DATASET_ROOT}. '
+        'Set MAPILLARY_PATH env var if you need Mapillary validation.'
+    )
 
 if not path_obj.joinpath('train_val'):
     raise Exception(f'Please make sure the directory train_val from mapillary_sls dataset is situated in the directory {DATASET_ROOT}')

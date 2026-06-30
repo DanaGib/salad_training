@@ -71,6 +71,7 @@ class SALAD(nn.Module):
             cluster_dim=128,
             token_dim=256,
             dropout=0.3,
+            depth_anything_hidden_dim=768
         ) -> None:
         super().__init__()
 
@@ -107,6 +108,17 @@ class SALAD(nn.Module):
         # Dustbin parameter z
         self.dust_bin = nn.Parameter(torch.tensor(1.))
 
+        # Predictor head for distillation
+        self.predictor_head = nn.Sequential(
+            nn.Linear(self.num_channels, 768),
+            nn.ReLU(),
+            nn.Linear(768, depth_anything_hidden_dim),
+        )
+
+    def project_patches(self, x):
+        # x: [B, C, H, W] -> [B, H*W, C] -> [B, H*W, depth_dim]
+        patches = x.flatten(2).permute(0, 2, 1)
+        return self.predictor_head(patches)
 
     def forward(self, x):
         """

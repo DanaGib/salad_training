@@ -13,7 +13,9 @@ if __name__ == '__main__':
         image_size=(224, 224),
         num_workers=10,
         show_data_stats=True,
-        val_set_names=['pitts30k_val', 'pitts30k_test', 'msls_val'], # pitts30k_val, pitts30k_test, msls_val
+        # Pittsburgh (.mat format) and Mapillary SLS not available;
+        # add them back here once compatible datasets are in place.
+        val_set_names=['pitts30k_val'],
     )
     
     model = VPRModel(
@@ -48,19 +50,18 @@ if __name__ == '__main__':
         loss_name='MultiSimilarityLoss',
         miner_name='MultiSimilarityMiner', # example: TripletMarginMiner, MultiSimilarityMiner, PairMarginMiner
         miner_margin=0.1,
-        faiss_gpu=False
+        faiss_gpu=False,
+        alpha=0.2,
     )
 
-    # model params saving using Pytorch Lightning
-    # we save the best 3 models accoring to Recall@1 on pittsburg val
     checkpoint_cb = pl.callbacks.ModelCheckpoint(
-        monitor='pitts30k_val/R1',
-        filename=f'{model.encoder_arch}' + '_({epoch:02d})_R1[{pitts30k_val/R1:.4f}]_R5[{pitts30k_val/R5:.4f}]',
+        filename=f'{model.encoder_arch}_epoch{{epoch:02d}}_R1={{pitts30k_val/R1:.4f}}',
         auto_insert_metric_name=False,
         save_weights_only=True,
-        save_top_k=3,
+        monitor='pitts30k_val/R1',
+        mode='max',
+        save_top_k=-1, # save all checkpoints
         save_last=True,
-        mode='max'
     )
 
     #------------------
@@ -73,7 +74,7 @@ if __name__ == '__main__':
         num_sanity_val_steps=0, # runs a validation step before stating training
         precision='16-mixed', # we use half precision to reduce  memory usage
         max_epochs=4,
-        check_val_every_n_epoch=1, # run validation every epoch
+        check_val_every_n_epoch=1,
         callbacks=[checkpoint_cb],# we only run the checkpointing callback (you can add more)
         reload_dataloaders_every_n_epochs=1, # we reload the dataset to shuffle the order
         log_every_n_steps=20,
