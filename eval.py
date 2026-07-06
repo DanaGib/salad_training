@@ -1,4 +1,5 @@
 import csv
+import json
 import torch
 from torch.utils.data import DataLoader
 import torchvision.transforms as T
@@ -174,6 +175,12 @@ def parse_args():
         help='Absolute or relative path for the output CSV. Overrides --csv_name '
              'and the default logs/eval/ directory when set.',
     )
+    parser.add_argument(
+        '--extra_params', type=str, default=None,
+        help='JSON string of extra metadata columns merged into every CSV row, '
+             'e.g. \'{"model_type":"salad_global_local_depth","alpha_global":0.05}\'. '
+             'Columns appear between image_size and R@1 in the output.',
+    )
 
     args = parser.parse_args()
 
@@ -229,6 +236,7 @@ if __name__ == '__main__':
     torch.backends.cudnn.benchmark = True
 
     args = parse_args()
+    extra_params = json.loads(args.extra_params) if args.extra_params else {}
 
     model = load_model(args.ckpt_path)
     results = []
@@ -269,16 +277,20 @@ if __name__ == '__main__':
                 f" R@10={preds[10]*100:.2f}"
                 f" R@20={preds[20]*100:.2f}"
             )
-            results.append({
+            row = {
                 "run_name": args.run_name or Path(args.ckpt_path).stem,
                 "checkpoint": Path(args.ckpt_path).name,
                 "dataset": val_name,
                 "image_size": str(args.image_size),
+            }
+            row.update(extra_params)
+            row.update({
                 "R@1":  round(preds[1]  * 100, 2),
                 "R@5":  round(preds[5]  * 100, 2),
                 "R@10": round(preds[10] * 100, 2),
                 "R@20": round(preds[20] * 100, 2),
             })
+            results.append(row)
 
         del descriptors
         print('========> DONE!\n\n')
