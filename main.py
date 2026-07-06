@@ -18,6 +18,7 @@ from datetime import datetime
 
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
+from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 
 from dataloaders.GSVCitiesDataloader import GSVCitiesDataModule
@@ -79,19 +80,18 @@ if __name__ == "__main__":
         save_last=True,
     )
 
-    trainer = pl.Trainer(
-        accelerator="gpu",
-        devices=1,
-        default_root_dir="./logs/",
-        num_nodes=1,
-        num_sanity_val_steps=0,
-        precision=cfg.training.precision,
-        max_epochs=cfg.training.max_epochs,
-        check_val_every_n_epoch=1,
-        callbacks=[checkpoint_cb],
-        reload_dataloaders_every_n_epochs=1,
-        log_every_n_steps=20,
-        logger=logger,
-    )
+    callbacks = [checkpoint_cb]
+    patience = int(getattr(cfg.training, "early_stop_patience", 0))
+    if patience > 0:
+        callbacks.append(EarlyStopping(
+            monitor="pitts30k_val/recall_at_1",
+            patience=patience, mode="max", min_delta=0.0005, verbose=True,
+        ))
 
-    trainer.fit(model=model, datamodule=datamodule)
+    pl.Trainer(
+        accelerator="gpu", devices=1, default_root_dir="./logs/",
+        num_nodes=1, num_sanity_val_steps=0, precision=cfg.training.precision,
+        max_epochs=cfg.training.max_epochs, check_val_every_n_epoch=1,
+        callbacks=callbacks, reload_dataloaders_every_n_epochs=1,
+        log_every_n_steps=20, logger=logger,
+    ).fit(model=model, datamodule=datamodule)
