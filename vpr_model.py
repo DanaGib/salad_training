@@ -44,6 +44,10 @@ class VPRModel(TrainingMixin, ValidationMixin, OptimiserMixin, pl.LightningModul
             "norm_layer": bb_cfg.norm_layer,
         })
         self.aggregator = helper.get_aggregator("SALAD", dict(cfg.model.aggregator))
+        init_ckpt = getattr(cfg.model, "init_aggregator_from", None)
+        if init_ckpt:
+            from utils.checkpoint import load_aggregator_weights
+            load_aggregator_weights(self.aggregator, init_ckpt)
         self.loss_fn = utils.get_loss(cfg.loss.vpr_loss)
         self.miner = utils.get_miner(cfg.loss.miner, cfg.loss.miner_margin)
         self.val_outputs = []
