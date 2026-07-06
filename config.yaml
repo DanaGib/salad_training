@@ -38,6 +38,11 @@ model:
   teacher:
     name: "depth-anything/Depth-Anything-V2-Base-hf"
 
+  # Optional: path to a Lightning .ckpt file whose aggregator.* weights are
+  # loaded into the SALAD aggregator before training (Trial 4 / pretrained init).
+  # Set to null to use random initialization (default).
+  init_aggregator_from: null
+
 loss:
   vpr_loss: "MultiSimilarityLoss"
   miner: "MultiSimilarityMiner"
@@ -77,6 +82,9 @@ training:
   faiss_gpu: false
   # -1 = keep all epoch checkpoints; set to 3 to keep only the best 3 by R@1
   save_top_k: -1
+  # Early stopping: stop when pitts30k_val/recall_at_1 does not improve by
+  # min_delta=0.0005 for this many consecutive epochs. 0 = disabled.
+  early_stop_patience: 0
 
 wandb:
   project: "salad-vpr"
