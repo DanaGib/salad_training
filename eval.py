@@ -22,6 +22,9 @@ VAL_DATASETS = [
     'Nordland', 'SPED',
     'amstertime',
     'SFXL_v1', 'SFXL_v2', 'SFXL_night', 'SFXL_occlusion',
+    'SVOX',
+    'SVOX_robotcar_sun', 'SVOX_robotcar_snow', 'SVOX_robotcar_rain',
+    'SVOX_robotcar_night', 'SVOX_robotcar_overcast',
 ]
 
 
@@ -86,6 +89,13 @@ def get_val_dataset(dataset_name, image_size=None):
     elif 'sped' in dataset_name:
         from dataloaders.val.SPEDDataset import SPEDDataset
         ds = SPEDDataset(input_transform=transform)
+    elif 'svox_robotcar' in dataset_name:
+        subset = dataset_name.split('svox_robotcar_', 1)[1]  # 'sun', 'snow', ...
+        from dataloaders.val.RobotCarSVOXDataset import RobotCarSVOXDataset
+        ds = RobotCarSVOXDataset(query_subset=subset, input_transform=transform)
+    elif 'svox' in dataset_name:
+        from dataloaders.val.SVOXDataset import SVOXDataset
+        ds = SVOXDataset(input_transform=transform)
     else:
         raise ValueError(f'Unknown dataset: {dataset_name}')
     
