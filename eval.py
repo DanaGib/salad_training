@@ -10,6 +10,7 @@ from typing import Optional
 from omegaconf import OmegaConf
 
 from vpr_model import VPRModel
+from utils.extraction import extract_descriptors
 from utils.validation import get_validation_recalls
 
 VAL_DATASETS = [
@@ -197,6 +198,18 @@ def parse_args():
              'e.g. \'{"model_type":"salad_global_local_depth","alpha_global":0.05}\'. '
              'Columns appear between image_size and R@1 in the output.',
     )
+    parser.add_argument(
+        '--save_descriptors', action='store_true',
+        help='Save extracted descriptors to disk under --desc_cache_dir for future reuse.',
+    )
+    parser.add_argument(
+        '--desc_cache_dir', type=str, default='logs/desc_cache',
+        help='Root folder for cached descriptor .npy files (organised by run_name/dataset).',
+    )
+    parser.add_argument(
+        '--num_workers', type=int, default=16,
+        help='Number of DataLoader workers for descriptor extraction.',
+    )
 
     args = parser.parse_args()
 
@@ -256,26 +269,30 @@ if __name__ == '__main__':
 
     model = load_model(args.ckpt_path)
     results = []
+    run_name = args.run_name or Path(args.ckpt_path).stem
+    db_cache = {}
 
     for val_name in args.val_datasets:
         val_dataset, num_references, num_queries, ground_truth = get_val_dataset(val_name, args.image_size)
-        val_loader = DataLoader(val_dataset, num_workers=16, batch_size=args.batch_size, shuffle=False, pin_memory=True)
+        cache_dir = Path(args.desc_cache_dir) / run_name / val_name
 
         print(f'Evaluating on {val_name}')
-        descriptors = get_descriptors(model, val_loader, 'cuda')
+        db_desc, q_desc, all_descriptors, db_cache = extract_descriptors(
+            model, torch.device('cuda'), val_dataset, args, cache_dir, db_cache
+        )
 
-        print(f'Descriptor dimension {descriptors.shape[1]}')
-        r_list = descriptors[ : num_references]
-        q_list = descriptors[num_references : ]
+        r_list = torch.from_numpy(db_desc)
+        q_list = torch.from_numpy(q_desc)
 
-        print('total_size', descriptors.shape[0], num_queries + num_references)
+        print(f'Descriptor dimension {all_descriptors.shape[1]}')
+        print('total_size', all_descriptors.shape[0], num_queries + num_references)
 
         testing = 'msls_test' in val_name.lower()
 
         preds = get_validation_recalls(
             r_list=r_list,
             q_list=q_list,
-            k_values=[1, 5, 10, 15, 20, 25],
+            k_values=[1, 5, 10, 20],
             gt=ground_truth,
             print_results=True,
             dataset_name=val_name,
@@ -294,7 +311,7 @@ if __name__ == '__main__':
                 f" R@20={preds[20]*100:.2f}"
             )
             row = {
-                "run_name": args.run_name or Path(args.ckpt_path).stem,
+                "run_name": run_name,
                 "checkpoint": Path(args.ckpt_path).name,
                 "dataset": val_name,
                 "image_size": str(args.image_size),
@@ -308,11 +325,9 @@ if __name__ == '__main__':
             })
             results.append(row)
 
-        del descriptors
         print('========> DONE!\n\n')
 
     if results:
-        run_name = args.run_name or Path(args.ckpt_path).stem
         explicit_path = Path(args.csv_path) if args.csv_path else None
         csv_name = args.csv_name or run_name
         out_path = save_results_csv(results, csv_name, csv_path=explicit_path)
