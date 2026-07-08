@@ -14,10 +14,13 @@ from utils.validation import get_validation_recalls
 
 VAL_DATASETS = [
     'MSLS', 'MSLS_Test',
+    'MSLS_Challenge_Test',
+    'MSLS_blur', 'MSLS_weather',
     'pitts30k_test', 'pitts30k_val',
     'pitts250k_test',
     'Nordland', 'SPED',
     'amstertime',
+    'SFXL_v1', 'SFXL_v2', 'SFXL_night', 'SFXL_occlusion',
 ]
 
 
@@ -51,6 +54,19 @@ def get_val_dataset(dataset_name, image_size=None):
     if 'nordland' in dataset_name:
         from dataloaders.val.NordlandDataset import NordlandDataset
         ds = NordlandDataset(input_transform=transform)
+    elif 'sfxl' in dataset_name:
+        subset = dataset_name.split('_', 1)[1]   # 'v1', 'v2', 'night', 'occlusion'
+        from dataloaders.val.SFXLDataset import SFXLDataset
+        ds = SFXLDataset(query_subset=subset, input_transform=transform)
+    elif dataset_name == 'msls_challenge_test':
+        from dataloaders.val.MSLSChallengeTestDataset import MSLSChallengeTest
+        ds = MSLSChallengeTest(input_transform=transform)
+    elif dataset_name == 'msls_blur':
+        from dataloaders.val.MapillaryDataset import MSLS
+        ds = MSLS(input_transform=transform, query_dir='query_blur')
+    elif dataset_name == 'msls_weather':
+        from dataloaders.val.MapillaryDataset import MSLS
+        ds = MSLS(input_transform=transform, query_dir='query_snow')
     elif 'msls_test' in dataset_name:
         from dataloaders.val.MapillaryTestDataset import MSLSTest
         ds = MSLSTest(input_transform=transform)
