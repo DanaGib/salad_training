@@ -46,15 +46,16 @@ def _build_gt(lat_q, lon_q, lat_db, lon_db, threshold_m: float) -> np.ndarray:
 class MSLS(Dataset):
     """MSLS validation set loader for GPS-encoded flat-directory format.
 
-    Reads all images from database/ (18,871) and query/ (740) directly.
-    Ground truth is computed on-the-fly via haversine distance (25 m threshold)
+    Ground truth is built on-the-fly via haversine distance (25 m threshold)
     using GPS coordinates encoded in MSLS filenames.
 
     Args:
         input_transform: Optional torchvision transform pipeline.
+        query_dir: Query subdirectory under MSLS_VAL_PATH. Defaults to
+            'query'. Pass 'query_blur' or 'query_snow' for degraded subsets.
     """
 
-    def __init__(self, input_transform=None):
+    def __init__(self, input_transform=None, query_dir: str = "query"):
         root = Path(MSLS_VAL_PATH)
         if not root.exists():
             raise FileNotFoundError(
@@ -62,7 +63,7 @@ class MSLS(Dataset):
                 "Set MSLS_VAL_PATH env var to the dataset root."
             )
         db_dir = root / "database"
-        q_dir  = root / "query"
+        q_dir  = root / query_dir
         for d in (db_dir, q_dir):
             if not d.exists():
                 raise FileNotFoundError(
