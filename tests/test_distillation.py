@@ -8,7 +8,7 @@ Run from the repo root:
 """
 import sys
 import types
-import pytest
+# import pytest
 import torch
 import torch.nn as nn
 
