@@ -12,7 +12,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 SVOX_ROOT = os.environ.get(
     "SVOX_PATH",
-    "/home/eng/giborda/delavpr/datasets/SVOX/svox/",
+    "/home/eng/giborda/delavpr/datasets/SVOX/svox/images/",
 )
 THRESHOLD_M = 10.0
 
