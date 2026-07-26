@@ -25,6 +25,7 @@ VAL_DATASETS = [
     'SVOX',
     'SVOX_robotcar_sun', 'SVOX_robotcar_snow', 'SVOX_robotcar_rain',
     'SVOX_robotcar_night', 'SVOX_robotcar_overcast',
+    'baidu', 'hawkins', 'laurel_caverns', 'meshvpr',
 ]
 
 
@@ -96,6 +97,18 @@ def get_val_dataset(dataset_name, image_size=None):
     elif 'svox' in dataset_name:
         from dataloaders.val.SVOXDataset import SVOXDataset
         ds = SVOXDataset(input_transform=transform)
+    elif 'baidu' in dataset_name:
+        from dataloaders.val.BaiduDataset import BaiduDataset
+        ds = BaiduDataset(input_transform=transform)
+    elif 'hawkins' in dataset_name:
+        from dataloaders.val.HawkinsDataset import HawkinsDataset
+        ds = HawkinsDataset(input_transform=transform)
+    elif 'laurel_caverns' in dataset_name:
+        from dataloaders.val.LaurelCavernsDataset import LaurelCavernsDataset
+        ds = LaurelCavernsDataset(input_transform=transform)
+    elif 'meshvpr' in dataset_name:
+        from dataloaders.val.MeshVPRDataset import MeshVPRDataset
+        ds = MeshVPRDataset(input_transform=transform)
     else:
         raise ValueError(f'Unknown dataset: {dataset_name}')
     
