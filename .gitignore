@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# Ignore dataset raw images and zip files
+raw/
+*.zip
+
 # Distribution / packaging
 .Python
 build/
