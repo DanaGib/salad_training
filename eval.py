@@ -25,7 +25,7 @@ VAL_DATASETS = [
     'SVOX',
     'SVOX_robotcar_sun', 'SVOX_robotcar_snow', 'SVOX_robotcar_rain',
     'SVOX_robotcar_night', 'SVOX_robotcar_overcast',
-    'baidu', 'hawkins', 'laurel_caverns', 'meshvpr',
+    'baidu', 'baidu_original', 'hawkins', 'laurel_caverns', 'meshvpr',
 ]
 
 
@@ -43,12 +43,22 @@ def input_transform(image_size=None):
             T.Normalize(mean=MEAN, std=STD)
         ])
 
-def get_val_dataset(dataset_name, image_size=None):
+def get_val_dataset(
+    dataset_name,
+    image_size=None,
+    baidu_threshold: float = None,
+    baidu_original_threshold: float = None,
+):
     """Build the requested validation dataset, importing the module lazily.
 
     Args:
         dataset_name: One of the keys in VAL_DATASETS.
         image_size: Optional (H, W) tuple passed to input_transform.
+        baidu_threshold: Override positive-match radius (m) for the Berton
+            split (baidu).  None defers to BAIDU_THRESHOLD_M env var / 25 m.
+        baidu_original_threshold: Override positive-match radius (m) for the
+            official IDL split (baidu_original).  None defers to
+            BAIDU_ORIGINAL_THRESHOLD_M env var / 10 m.
 
     Returns:
         Tuple of (dataset, num_references, num_queries, ground_truth).
@@ -97,9 +107,14 @@ def get_val_dataset(dataset_name, image_size=None):
     elif 'svox' in dataset_name:
         from dataloaders.val.SVOXDataset import SVOXDataset
         ds = SVOXDataset(input_transform=transform)
+    elif dataset_name == 'baidu_original':
+        from dataloaders.val.baidu_original_dataloader import BaiduOriginalDataset
+        ds = BaiduOriginalDataset(
+            input_transform=transform, threshold_m=baidu_original_threshold
+        )
     elif 'baidu' in dataset_name:
         from dataloaders.val.BaiduDataset import BaiduDataset
-        ds = BaiduDataset(input_transform=transform)
+        ds = BaiduDataset(input_transform=transform, threshold_m=baidu_threshold)
     elif 'hawkins' in dataset_name:
         from dataloaders.val.HawkinsDataset import HawkinsDataset
         ds = HawkinsDataset(input_transform=transform)
@@ -233,6 +248,21 @@ def parse_args():
         '--num_workers', type=int, default=16,
         help='Number of DataLoader workers for descriptor extraction.',
     )
+    parser.add_argument(
+        '--baidu_threshold', type=float, default=None,
+        help=(
+            'Positive-match radius (m) for the Berton/VPR-methods-evaluation '
+            'baidu split.  Defaults to BAIDU_THRESHOLD_M env var, then 25.0.'
+        ),
+    )
+    parser.add_argument(
+        '--baidu_original_threshold', type=float, default=None,
+        help=(
+            'Positive-match radius (m) for the official IDL_cvpr17 '
+            'baidu_original split.  Defaults to BAIDU_ORIGINAL_THRESHOLD_M '
+            'env var, then 10.0.'
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -296,7 +326,12 @@ if __name__ == '__main__':
     db_cache = {}
 
     for val_name in args.val_datasets:
-        val_dataset, num_references, num_queries, ground_truth = get_val_dataset(val_name, args.image_size)
+        val_dataset, num_references, num_queries, ground_truth = get_val_dataset(
+            val_name,
+            args.image_size,
+            baidu_threshold=args.baidu_threshold,
+            baidu_original_threshold=args.baidu_original_threshold,
+        )
         cache_dir = Path(args.desc_cache_dir) / run_name / val_name
 
         print(f'Evaluating on {val_name}')
