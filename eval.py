@@ -26,6 +26,7 @@ VAL_DATASETS = [
     'SVOX_robotcar_sun', 'SVOX_robotcar_snow', 'SVOX_robotcar_rain',
     'SVOX_robotcar_night', 'SVOX_robotcar_overcast',
     'baidu', 'baidu_original', 'hawkins', 'laurel_caverns', 'meshvpr',
+    'aerialvl',
 ]
 
 
@@ -124,6 +125,9 @@ def get_val_dataset(
     elif 'meshvpr' in dataset_name:
         from dataloaders.val.MeshVPRDataset import MeshVPRDataset
         ds = MeshVPRDataset(input_transform=transform)
+    elif 'aerialvl' in dataset_name:
+        from dataloaders.val.AerialVLDataset import AerialVLDataset
+        ds = AerialVLDataset(input_transform=transform)
     else:
         raise ValueError(f'Unknown dataset: {dataset_name}')
     
