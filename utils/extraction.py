@@ -59,11 +59,13 @@ def extract_descriptors(
     if db_cache is None:
         db_cache = {}
 
+    num_db, num_q = dataset.num_references, dataset.num_queries
+
     hit = _try_load_from_disk(cache_dir, dataset)
     if hit is not None:
+        db_cache[num_db] = hit[0]
         return hit[0], hit[1], hit[2], db_cache
 
-    num_db, num_q = dataset.num_references, dataset.num_queries
 
     def _infer(indices: list, label: str) -> np.ndarray:
         """Run model inference over a subset and return stacked numpy array."""
