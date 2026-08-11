@@ -28,7 +28,8 @@ CKPT_BASE="$REPO_ROOT/logs/checkpoints"
 CSV_OUT="$REPO_ROOT/logs/eval/svox_eval.csv"
 LOG_DIR="$REPO_ROOT/logs/runs"
 
-export SVOX_PATH="${SVOX_PATH:-/home/eng/giborda/delavpr/datasets/SVOX/svox/}"
+# export SVOX_PATH="${SVOX_PATH:-/home/eng/giborda/delavpr/datasets/SVOX/svox/}"
+export SVOX_PATH="${SVOX_PATH:-/home/eng/giborda/delavpr/datasets/SVOX/svox/images/}"
 
 DATASETS="SVOX SVOX_robotcar_sun SVOX_robotcar_snow SVOX_robotcar_rain SVOX_robotcar_night SVOX_robotcar_overcast"
 
@@ -67,13 +68,42 @@ eval_run() {
 # Add eval_run calls below, one per checkpoint to evaluate.
 # Example (uncomment and fill in actual run names / extra params):
 #
-# eval_run baseline \
-#          baseline_bs80_ep6_es \
-#          '{"model_type":"salad_baseline"}'
-#
-# eval_run v2_global_local_ag0.05_al0.1 \
-#          v2_global_local_ag0.05_al0.1 \
-#          '{"model_type":"salad_global_local_depth","alpha_global":0.05,"alpha_local":0.1}'
+
+
+# --- Baselines ---
+
+
+# eval_run "$CKPT_BASE/baseline_20260609_001439/last.ckpt" \
+#          "20260609_001439_last"
+
+# # --- Additional baseline sweeps ---
+
+# eval_run "$CKPT_BASE/baseline_bs80_ep6_no_es_20260706_181043/last.ckpt" \
+#          "baseline_bs80_ep6_no_es"
+
+# # --- v2 models ---
+# eval_run "$CKPT_BASE/v2_global_local_ag0.02_al0.05_20260630_230727/last.ckpt" \
+#          "v2_global_local_ag0.02_al0.05"
+
+# eval_run "$CKPT_BASE/v2_global_local_ag0.05_al0.1_20260630_190251/last.ckpt" \
+#          "v2_global_local_ag0.05_al0.1"
+
+
+ eval_run baseline \
+          baseline_20260609_001439 \
+          '{"model_type":"salad_baseline"}'
+
+ eval_run baseline \
+          baseline_bs80_ep6_no_es \
+          '{"model_type":"salad_baseline"}'
+
+ eval_run v2_global_local_ag0.05_al0.1 \
+         v2_global_local_ag0.05_al0.1 \
+         '{"model_type":"salad_global_local_depth","alpha_global":0.05,"alpha_local":0.1}'
+
+ eval_run v2_global_local_ag0.02_al0.05 \
+         v2_global_local_ag0.02_al0.05\
+         '{"model_type":"salad_global_local_depth","alpha_global":0.02,"alpha_local":0.05}'
 # ---------------------------------------------------------------------------
 
 echo ""
