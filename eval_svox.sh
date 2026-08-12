@@ -44,7 +44,11 @@ OVERALL=0
 eval_run() {
     local run_name="$1" ckpt_prefix="$2" params="$3"
     local ckpt_dir
-    ckpt_dir=$(ls -td "$CKPT_BASE/${ckpt_prefix}_"* 2>/dev/null | head -1 || true)
+    if [ -d "$CKPT_BASE/$ckpt_prefix" ]; then
+        ckpt_dir="$CKPT_BASE/$ckpt_prefix"
+    else
+        ckpt_dir=$(ls -td "$CKPT_BASE/${ckpt_prefix}_"* 2>/dev/null | head -1 || true)
+    fi
     if [ -z "$ckpt_dir" ] || [ ! -f "$ckpt_dir/last.ckpt" ]; then
         echo "SKIP (checkpoint not found): $ckpt_prefix"
         return 0
@@ -89,13 +93,21 @@ eval_run() {
 #          "v2_global_local_ag0.05_al0.1"
 
 
- eval_run baseline \
+eval_run baseline_20260609_001439 \
           baseline_20260609_001439 \
           '{"model_type":"salad_baseline"}'
 
- eval_run baseline \
+ eval_run baseline_bs80_ep6_no_es \
           baseline_bs80_ep6_no_es \
           '{"model_type":"salad_baseline"}'
+
+#  eval_run baseline \
+#           baseline_20260609_001439 \
+#           '{"model_type":"salad_baseline"}'
+
+#  eval_run baseline \
+#           baseline_bs80_ep6_no_es \
+#           '{"model_type":"salad_baseline"}'
 
  eval_run v2_global_local_ag0.05_al0.1 \
          v2_global_local_ag0.05_al0.1 \

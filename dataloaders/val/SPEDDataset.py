@@ -2,6 +2,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
+import os
+from pathlib import Path
 
 # NOTE: you need to download the SPED dataset from  https://surfdrive.surf.nl/files/index.php/s/sbZRXzYe3l0v67W
 # this link is shared and maintained by the authors of VPR_Bench: https://github.com/MubarizZaffar/VPR-Bench
@@ -9,8 +11,10 @@ from torch.utils.data import Dataset
 # I hardcoded the image names and ground truth for faster evaluation
 # performance is exactly the same as if you use VPR-Bench.
 
-DATASET_ROOT = '../data/SPEDTEST/'
+# DATASET_ROOT = '../data/SPEDTEST/'
+DATASET_ROOT = os.environ.get("SPED_PATH", "/home/shared/datasets/SPEDTEST/")
 GT_ROOT = './datasets/' # BECAREFUL, this is the ground truth that comes with GSV-Cities
+
 
 path_obj = Path(DATASET_ROOT)
 if not path_obj.exists():
